@@ -1,0 +1,16 @@
+{
+  "name": "skyzone",
+  "version": "2.0.0",
+  "description": "Skyzone — 3D multiplayer battle royale with Fortnite-style lobby",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "ws": "^8.17.1"
+  }
+}
