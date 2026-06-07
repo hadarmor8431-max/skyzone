@@ -9,6 +9,7 @@ const MAX_HP = 100;
 
 const WEAPONS = {
   ar:     { dmg: 25,  cooldown: 110,  range: 80                              },
+  smg:    { dmg: 12,  cooldown: 65,   range: 45                              },
   pump:   { dmg: 15,  cooldown: 800,  range: 22,  pellets: 10, spread: 0.09  },
   sniper: { dmg: 100, cooldown: 1400, range: 250                             },
 };
@@ -22,6 +23,11 @@ const SHIELD_PER_POTION = 25;
 const POTION_COUNT = 80;
 const PICKUP_RADIUS = 1.8;
 const SPAWN_PROTECTION_MS = 3000;
+const HEADSHOT_MULT = 1.75;
+const SKY_DROP_HEIGHT = 60;
+const CHEST_COUNT = 12;
+const CHEST_SHIELD_BONUS = 50;
+const CHEST_HP_BONUS = 30;
 
 // Lobby
 const LOBBY_CENTER = { x: -210, z: -210 };
@@ -46,6 +52,8 @@ let gameState = 'lobby'; // lobby | playing | ended
 let zone = { cx: 0, cz: 0, r: MAP_SIZE / 2 };
 let potions = []; // {id, x, z}
 let nextPotionId = 1;
+let chests = []; // {id, x, z}
+let nextChestId = 1;
 let lastShrink = Date.now();
 let lastTick = Date.now();
 let lastZoneDamage = Date.now();
@@ -132,10 +140,11 @@ function startGame() {
   lastZoneDamage = Date.now();
   winnerInfo = null;
   potions = generatePotions();
+  chests = generateChests();
   const now = Date.now();
   for (const p of players.values()) {
     const pos = spawnPos();
-    p.x = pos.x; p.y = pos.y; p.z = pos.z;
+    p.x = pos.x; p.y = SKY_DROP_HEIGHT; p.z = pos.z; // SKY DROP — spawn high
     p.hp = MAX_HP;
     p.shield = 0;
     p.alive = true;
@@ -143,7 +152,13 @@ function startGame() {
     p.kills = 0;
     p.protectedUntil = now + SPAWN_PROTECTION_MS;
   }
-  broadcast({ type: 'gamestart', zone, obstacles, potions, shrinkInterval: ZONE_SHRINK_INTERVAL_MS, spawnProtectionMs: SPAWN_PROTECTION_MS });
+  broadcast({
+    type: 'gamestart',
+    zone, obstacles, potions, chests,
+    shrinkInterval: ZONE_SHRINK_INTERVAL_MS,
+    spawnProtectionMs: SPAWN_PROTECTION_MS,
+    skyDropHeight: SKY_DROP_HEIGHT,
+  });
 }
 
 function generatePotions() {
@@ -153,6 +168,8 @@ function generatePotions() {
     for (let tries = 0; tries < 20 && !ok; tries++) {
       x = (Math.random() - 0.5) * (MAP_SIZE - 20);
       z = (Math.random() - 0.5) * (MAP_SIZE - 20);
+      // Don't spawn in lobby area
+      if (Math.hypot(x - LOBBY_CENTER.x, z - LOBBY_CENTER.z) < LOBBY_SIZE + 8) continue;
       ok = true;
       for (const o of obstacles) {
         if (o.tree) continue;
@@ -163,6 +180,28 @@ function generatePotions() {
       }
     }
     arr.push({ id: nextPotionId++, x, z });
+  }
+  return arr;
+}
+
+function generateChests() {
+  const arr = [];
+  for (let i = 0; i < CHEST_COUNT; i++) {
+    let x = 0, z = 0, ok = false;
+    for (let tries = 0; tries < 25 && !ok; tries++) {
+      x = (Math.random() - 0.5) * (MAP_SIZE - 30);
+      z = (Math.random() - 0.5) * (MAP_SIZE - 30);
+      if (Math.hypot(x - LOBBY_CENTER.x, z - LOBBY_CENTER.z) < LOBBY_SIZE + 12) continue;
+      ok = true;
+      for (const o of obstacles) {
+        if (o.tree) continue;
+        if (Math.abs(x - o.x) < o.w / 2 + 2 && Math.abs(z - o.z) < o.d / 2 + 2) {
+          ok = false;
+          break;
+        }
+      }
+    }
+    arr.push({ id: nextChestId++, x, z });
   }
   return arr;
 }
@@ -248,6 +287,22 @@ function tick() {
           const removed = potions.splice(i, 1)[0];
           broadcast({ type: 'pickup', potionId: removed.id });
           send(p.ws, { type: 'hp', hp: p.hp, shield: p.shield, fromZone: false });
+        }
+      }
+    }
+
+    // Pickup chests (golden boxes)
+    for (const [pid, p] of players) {
+      if (!p.alive) continue;
+      for (let i = chests.length - 1; i >= 0; i--) {
+        const ch = chests[i];
+        const dx = p.x - ch.x, dz = p.z - ch.z;
+        if (dx * dx + dz * dz < (PICKUP_RADIUS + 0.8) ** 2) {
+          p.shield = Math.min(MAX_SHIELD, p.shield + CHEST_SHIELD_BONUS);
+          p.hp = Math.min(MAX_HP, p.hp + CHEST_HP_BONUS);
+          const removed = chests.splice(i, 1)[0];
+          broadcast({ type: 'chest_picked', chestId: removed.id });
+          send(p.ws, { type: 'hp', hp: p.hp, shield: p.shield, fromZone: false, fromChest: true });
         }
       }
     }
@@ -355,17 +410,22 @@ function handleShoot(shooterId, msg) {
   const spread = w.spread || 0;
   const pelletResults = [];
   const damageByTarget = new Map();
+  const headshotTargets = new Set();
 
   for (let pi = 0; pi < numPellets; pi++) {
     const [pdx, pdy, pdz] = numPellets > 1 ? applySpread(ndx, ndy, ndz, spread) : [ndx, ndy, ndz];
     let bestT = rayHitsObstacle(ox, oy, oz, pdx, pdy, pdz, maxRange);
     let hitId = null;
+    let hitWasHeadshot = false;
     for (const [id, p] of players) {
       if (id === shooterId || !p.alive) continue;
       const t = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, p.y + 1, p.z, 0.9);
       if (t !== null && t > 0 && t < bestT) {
         bestT = t;
         hitId = id;
+        // Compute hit Y to detect headshots — head zone is upper ~25% of player capsule
+        const hitY = oy + pdy * t;
+        hitWasHeadshot = hitY > (p.y + 1.55);
       }
     }
     pelletResults.push({
@@ -373,7 +433,10 @@ function handleShoot(shooterId, msg) {
       dist: isFinite(bestT) ? bestT : maxRange,
     });
     if (hitId !== null) {
-      damageByTarget.set(hitId, (damageByTarget.get(hitId) || 0) + w.dmg);
+      const dmg = w.dmg * (hitWasHeadshot ? HEADSHOT_MULT : 1);
+      damageByTarget.set(hitId, (damageByTarget.get(hitId) || 0) + dmg);
+      // Mark if this player took any headshot this shot
+      if (hitWasHeadshot) headshotTargets.add(hitId);
     }
   }
 
@@ -409,11 +472,12 @@ function handleShoot(shooterId, msg) {
     // Damage feedback for the shooter (floating numbers + hit marker)
     send(shooter.ws, {
       type: 'dmg',
-      amount: shieldDmg + hpDmg,
-      shieldDmg,
-      hpDmg,
+      amount: Math.round(shieldDmg + hpDmg),
+      shieldDmg: Math.round(shieldDmg),
+      hpDmg: Math.round(hpDmg),
       targetId: hitId,
       x: target.x, y: target.y, z: target.z,
+      headshot: headshotTargets.has(hitId),
     });
     if (target.hp <= 0) {
       shooter.kills = (shooter.kills || 0) + 1;
@@ -461,6 +525,7 @@ wss.on('connection', (ws) => {
     obstacles,
     zone,
     potions,
+    chests,
     mapSize: MAP_SIZE,
     gameState,
     winner: winnerInfo,

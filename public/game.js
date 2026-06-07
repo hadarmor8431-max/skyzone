@@ -32,8 +32,9 @@ if (savedName) nameInput.value = savedName;
 const SETTINGS_KEY = 'epbSettings';
 const DEFAULT_KEYBINDS = {
   weaponAR: 'Digit1',
-  weaponPump: 'Digit2',
-  weaponSniper: 'Digit3',
+  weaponSMG: 'Digit2',
+  weaponPump: 'Digit3',
+  weaponSniper: 'Digit4',
 };
 const DEFAULT_SETTINGS = {
   sensitivity: 1.0,    // multiplier on base 0.0025
@@ -172,6 +173,59 @@ function buildObstacles(obs) {
       roof.position.set(o.x, o.y + o.h / 2 + 0.2, o.z);
       obstacleGroup.add(roof);
     }
+  }
+}
+
+// Golden chest pickup management
+const chestMeshes = new Map(); // id -> mesh
+
+function spawnChest(id, x, z) {
+  const group = new THREE.Group();
+  const goldMat = new THREE.MeshLambertMaterial({
+    color: 0xffd766,
+    emissive: 0x886622,
+    emissiveIntensity: 0.5,
+  });
+  const trimMat = new THREE.MeshLambertMaterial({ color: 0x6a4a18 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 1.0), goldMat);
+  base.position.y = 0.4;
+  group.add(base);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.3, 1.05), trimMat);
+  lid.position.y = 0.95;
+  group.add(lid);
+  // Glow halo
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffeb88, transparent: true, opacity: 0.18, depthWrite: false })
+  );
+  glow.position.y = 0.6;
+  group.add(glow);
+  group.position.set(x, 0, z);
+  group.userData.baseY = 0;
+  group.userData.phase = Math.random() * Math.PI * 2;
+  scene.add(group);
+  chestMeshes.set(id, group);
+}
+
+function removeChest(id) {
+  const m = chestMeshes.get(id);
+  if (!m) return;
+  scene.remove(m);
+  m.traverse((c) => {
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) c.material.dispose();
+  });
+  chestMeshes.delete(id);
+}
+
+function clearAllChests() {
+  for (const id of [...chestMeshes.keys()]) removeChest(id);
+}
+
+function animateChests(t) {
+  for (const m of chestMeshes.values()) {
+    m.position.y = m.userData.baseY + Math.abs(Math.sin(t * 1.5 + m.userData.phase)) * 0.25;
+    m.rotation.y += 0.012;
   }
 }
 
@@ -348,6 +402,12 @@ function buildWeaponMesh(name) {
     add(new THREE.BoxGeometry(0.08, 0.18, 0.10), black, 0,    -0.16, 0.05);  // magazine
     add(new THREE.BoxGeometry(0.08, 0.12, 0.22), gray,  0,     0,    0.38);  // stock
     add(new THREE.BoxGeometry(0.04, 0.05, 0.08), black, 0,     0.11,-0.05);  // sight
+  } else if (name === 'smg') {
+    add(new THREE.BoxGeometry(0.09, 0.13, 0.36), gray,  0,     0,    0);     // compact receiver
+    add(new THREE.BoxGeometry(0.04, 0.04, 0.22), black, 0,     0,   -0.27);  // short barrel
+    add(new THREE.BoxGeometry(0.07, 0.20, 0.08), black, 0,    -0.16, 0.02);  // tall magazine
+    add(new THREE.BoxGeometry(0.07, 0.10, 0.12), gray,  0,     0,    0.24);  // small stock
+    add(new THREE.BoxGeometry(0.03, 0.04, 0.06), black, 0,     0.09,-0.05);  // sight
   } else if (name === 'pump') {
     add(new THREE.BoxGeometry(0.13, 0.16, 0.42), wood,  0,     0,    0);     // body
     add(new THREE.BoxGeometry(0.08, 0.08, 0.32), black, 0,     0.02,-0.37);  // barrel
@@ -449,6 +509,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') e.preventDefault();
   const kb = settings.keyBindings;
   if (e.code === kb.weaponAR) selectWeapon('ar');
+  else if (e.code === kb.weaponSMG) selectWeapon('smg');
   else if (e.code === kb.weaponPump) selectWeapon('pump');
   else if (e.code === kb.weaponSniper) selectWeapon('sniper');
 });
@@ -616,6 +677,7 @@ window.addEventListener('resize', () => {
 // ---------- WEAPONS ----------
 const WEAPONS = {
   ar:     { dmg: 25,  cooldown: 110,  color: 0xfff0a8, radius: 0.04, length: 0.9,  speed: 220, flashSize: 0.35, flashColor: 0xffdd66, pitch: 1.0  },
+  smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15 },
   pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65 },
   sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35 },
 };
@@ -968,10 +1030,34 @@ function playSniperShot(volume = 1.0) {
   bangGain.connect(echoDelay).connect(echoLP).connect(echoGain).connect(audioCtx.destination);
 }
 
+function playSMGShot(volume = 1.0) {
+  volume *= settings.volume;
+  if (!audioCtx || volume <= 0.005) return;
+  const now = audioCtx.currentTime;
+  // Snappier, higher-pitched than AR
+  const src = audioCtx.createBufferSource();
+  src.buffer = _noiseBuffer(0.10, 0.018);
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 0.7;
+  const g = audioCtx.createGain(); g.gain.value = 0.45 * volume;
+  src.connect(bp).connect(g).connect(audioCtx.destination);
+  src.start(now);
+  const osc = audioCtx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(160, now);
+  osc.frequency.exponentialRampToValueAtTime(60, now + 0.06);
+  const og = audioCtx.createGain();
+  og.gain.setValueAtTime(0.35 * volume, now);
+  og.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  osc.connect(og).connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.09);
+}
+
 // Dispatcher used by spawnShotEffect
 function playWeaponSound(weapon, volume = 1.0) {
   if (weapon === 'sniper') return playSniperShot(volume);
   if (weapon === 'pump')   return playPumpShot(volume);
+  if (weapon === 'smg')    return playSMGShot(volume);
   return playARShot(volume);
 }
 
@@ -1036,6 +1122,10 @@ function handleMsg(msg) {
     if (msg.potions) {
       for (const p of msg.potions) spawnPotion(p.id, p.x, p.z);
     }
+    clearAllChests();
+    if (msg.chests) {
+      for (const c of msg.chests) spawnChest(c.id, c.x, c.z);
+    }
   } else if (msg.type === 'lobby') {
     gameState = 'lobby';
     setLobbyUI(true);
@@ -1059,10 +1149,17 @@ function handleMsg(msg) {
     }
   } else if (msg.type === 'pickup') {
     removePotion(msg.potionId);
+  } else if (msg.type === 'chest_picked') {
+    removeChest(msg.chestId);
+    statusEl.textContent = '+50 SHIELD +30 HP';
+    setTimeout(() => { if (statusEl.textContent === '+50 SHIELD +30 HP') statusEl.textContent = ''; }, 2500);
   } else if (msg.type === 'dmg') {
     if (!msg.blocked) {
       spawnDamageNumber(msg.x, msg.y, msg.z, msg.amount, msg.shieldDmg || 0, msg.hpDmg || 0);
       flashHitMarker();
+      if (msg.headshot) {
+        spawnDamageNumber(msg.x, msg.y + 0.7, msg.z, 'HEADSHOT!', 0, 0);
+      }
     }
   } else if (msg.type === 'eliminated') {
     me.kills = msg.kills;
@@ -1104,6 +1201,15 @@ function handleMsg(msg) {
     clearAllPotions();
     if (msg.potions) {
       for (const p of msg.potions) spawnPotion(p.id, p.x, p.z);
+    }
+    clearAllChests();
+    if (msg.chests) {
+      for (const c of msg.chests) spawnChest(c.id, c.x, c.z);
+    }
+    // SKY DROP — instantly teleport up so player falls into the map
+    if (msg.skyDropHeight) {
+      me.y = msg.skyDropHeight;
+      me.vy = 0;
     }
     deathOverlay.classList.add('hidden');
     winOverlay.classList.add('hidden');
@@ -1504,12 +1610,36 @@ function drawMinimap() {
     ctx.arc(cx + m.position.x * scale, cy + m.position.z * scale, 1.8, 0, Math.PI * 2);
     ctx.fill();
   }
+  // Chests (gold)
+  ctx.fillStyle = '#ffd766';
+  for (const m of chestMeshes.values()) {
+    ctx.beginPath();
+    ctx.arc(cx + m.position.x * scale, cy + m.position.z * scale, 3.0, 0, Math.PI * 2);
+    ctx.fill();
+  }
   // Me
   if (me.alive) {
     ctx.fillStyle = '#6bff8a';
     ctx.beginPath();
     ctx.arc(cx + me.x * scale, cy + me.z * scale, 3.5, 0, Math.PI * 2);
     ctx.fill();
+    // Zone-direction arrow: if outside zone, draw an arrow on my dot pointing to zone center
+    if (gameState === 'playing') {
+      const dx = zone.cx - me.x;
+      const dz = zone.cz - me.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > zone.r) {
+        const ang = Math.atan2(dx, dz); // 0 = +Z (south on minimap)
+        const px = cx + me.x * scale;
+        const py = cy + me.z * scale;
+        ctx.strokeStyle = '#ff5050';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.sin(ang) * 12, py + Math.cos(ang) * 12);
+        ctx.stroke();
+      }
+    }
   }
 }
 
@@ -1520,6 +1650,7 @@ function loop() {
   updateEffects(dt);
   updateDamageNumbers(dt);
   animatePotions(clock.elapsedTime);
+  animateChests(clock.elapsedTime);
   updateWeaponCooldownUI();
   updateZoneTimer();
   updateSpawnProtectUI();
@@ -1566,6 +1697,7 @@ function syncHotkeyChips() {
   const kb = settings.keyBindings;
   const setChip = (sel, code) => { const el = document.querySelector(sel); if (el) el.textContent = keyLabel(code); };
   setChip('.weapon[data-weapon="ar"] .wKey', kb.weaponAR);
+  setChip('.weapon[data-weapon="smg"] .wKey', kb.weaponSMG);
   setChip('.weapon[data-weapon="pump"] .wKey', kb.weaponPump);
   setChip('.weapon[data-weapon="sniper"] .wKey', kb.weaponSniper);
 }
