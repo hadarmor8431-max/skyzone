@@ -288,12 +288,177 @@ function animatePotions(t) {
 }
 
 // Player models
-function makePlayerMesh(color, name) {
+// ---------- COSMETICS ----------
+const SKINS = {
+  default: { name: 'Recruit',   shirt: 0x4f8fff, skin: 0xffd9b3, pants: 0x2a3450, boot: 0x141420, price: 0   },
+  crimson: { name: 'Crimson',   shirt: 0xc0392b, skin: 0xeb9472, pants: 0x4a1212, boot: 0x1a0606, price: 200 },
+  knight:  { name: 'Knight',    shirt: 0x9aa0a8, skin: 0xffd9b3, pants: 0x8a6a18, boot: 0x3a2a08, price: 300 },
+  ninja:   { name: 'Shadow',    shirt: 0x1a1a1a, skin: 0x2a2a2a, pants: 0x0f0f0f, boot: 0x000000, price: 400 },
+  cyber:   { name: 'Cyberpunk', shirt: 0x00ffcc, skin: 0xccaaee, pants: 0x4a1a8a, boot: 0xff00ff, price: 500 },
+};
+
+const EMOTES = {
+  wave:  { name: 'Wave',  duration: 2500 },
+  spin:  { name: 'Spin',  duration: 3000 },
+  floss: { name: 'Floss', duration: 3000 },
+  dab:   { name: 'Dab',   duration: 2000 },
+};
+
+function applyEmoteFrame(mesh, emoteName, t) {
+  if (!mesh || !mesh.userData) return;
+  const { armL, armR } = mesh.userData;
+  if (!armL || !armR) return;
+  if (emoteName === 'wave') {
+    armR.rotation.x = -0.6;
+    armR.rotation.z = Math.sin(t * 9) * 0.7;
+    armL.rotation.x = 1.3;
+    armL.rotation.z = 0;
+  } else if (emoteName === 'spin') {
+    mesh.rotation.y += 0.18;
+    armL.rotation.x = -1.0; armL.rotation.z = -0.4;
+    armR.rotation.x = -1.0; armR.rotation.z = 0.4;
+  } else if (emoteName === 'floss') {
+    const ph = t * 8;
+    armL.rotation.x = -0.3;
+    armR.rotation.x = -0.3;
+    armL.rotation.z = Math.sin(ph) * 0.7;
+    armR.rotation.z = -Math.sin(ph) * 0.7;
+    mesh.position.y = mesh.userData._baseY + Math.abs(Math.sin(ph * 2)) * 0.15;
+  } else if (emoteName === 'dab') {
+    armL.rotation.x = -2.0; armL.rotation.z = 0.5;
+    armR.rotation.x = -1.5; armR.rotation.z = -0.9;
+  }
+}
+
+// ---------- V-COINS & STATS ----------
+const VCOINS_KEY = 'skyzone_vcoins';
+const OWNED_KEY = 'skyzone_owned_skins';
+const EQUIPPED_KEY = 'skyzone_equipped_skin';
+const STATS_KEY = 'skyzone_stats';
+
+let vcoins = parseInt(localStorage.getItem(VCOINS_KEY) || '100', 10);
+let ownedSkins = JSON.parse(localStorage.getItem(OWNED_KEY) || '["default"]');
+let equippedSkin = localStorage.getItem(EQUIPPED_KEY) || 'default';
+let playerStats = JSON.parse(localStorage.getItem(STATS_KEY) || '{"matches":0,"kills":0,"wins":0}');
+
+function saveCoins() { localStorage.setItem(VCOINS_KEY, String(vcoins)); }
+function saveOwned() { localStorage.setItem(OWNED_KEY, JSON.stringify(ownedSkins)); }
+function saveEquipped() { localStorage.setItem(EQUIPPED_KEY, equippedSkin); }
+function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(playerStats)); }
+
+function addCoins(n) { vcoins += n; saveCoins(); updateCoinsUI(); }
+
+function updateCoinsUI() {
+  const el = document.getElementById('vcoinsHUD');
+  if (el) el.textContent = `V$ ${vcoins}`;
+  const lockerCoins = document.getElementById('lockerCoinsVal');
+  if (lockerCoins) lockerCoins.textContent = vcoins;
+}
+
+// Active emotes per player id: { startedAt, name }
+const activeEmotes = new Map();
+
+function triggerEmote(emoteName, playerId) {
+  const e = EMOTES[emoteName];
+  if (!e) return;
+  activeEmotes.set(playerId, { name: emoteName, startedAt: performance.now() });
+}
+
+function sendEmote(emoteName) {
+  if (!EMOTES[emoteName]) return;
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'emote', emote: emoteName }));
+  }
+  // Trigger locally too (server will broadcast back but feel snappier)
+  triggerEmote(emoteName, me.id);
+  closeEmoteMenu();
+}
+
+function toggleEmoteMenu() {
+  const m = document.getElementById('emoteMenu');
+  if (!m) return;
+  if (m.classList.contains('hidden')) openEmoteMenu();
+  else closeEmoteMenu();
+}
+
+function openEmoteMenu() {
+  const m = document.getElementById('emoteMenu');
+  if (!m) return;
+  m.classList.remove('hidden');
+  if (pointerLocked) document.exitPointerLock();
+}
+
+function closeEmoteMenu() {
+  const m = document.getElementById('emoteMenu');
+  if (!m) return;
+  m.classList.add('hidden');
+}
+
+function renderLockerUI() {
+  const grid = document.getElementById('lockerSkinGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const [id, s] of Object.entries(SKINS)) {
+    const owned = ownedSkins.includes(id);
+    const equipped = id === equippedSkin;
+    const div = document.createElement('div');
+    div.className = 'skinCard' + (equipped ? ' equipped' : owned ? ' owned' : ' locked');
+    div.innerHTML = `
+      <div class="skinSwatch" style="background:linear-gradient(135deg,#${s.shirt.toString(16).padStart(6,'0')} 0%,#${s.pants.toString(16).padStart(6,'0')} 100%)"></div>
+      <div class="skinName">${s.name}</div>
+      <div class="skinAction">${equipped ? 'EQUIPPED' : owned ? 'EQUIP' : `V$ ${s.price}`}</div>
+    `;
+    div.addEventListener('click', () => buyOrEquipSkin(id));
+    grid.appendChild(div);
+  }
+  const stats = document.getElementById('lockerStats');
+  if (stats) stats.innerHTML = `Matches: <b>${playerStats.matches}</b> &middot; Kills: <b>${playerStats.kills}</b> &middot; Wins: <b>${playerStats.wins}</b>`;
+  updateCoinsUI();
+}
+
+function buyOrEquipSkin(skinId) {
+  const s = SKINS[skinId];
+  if (!s) return;
+  if (!ownedSkins.includes(skinId)) {
+    if (vcoins < s.price) return; // not enough coins
+    vcoins -= s.price;
+    ownedSkins.push(skinId);
+    saveCoins();
+    saveOwned();
+    updateCoinsUI();
+  }
+  equippedSkin = skinId;
+  saveEquipped();
+  // Rebuild local mesh with new skin
+  if (myMesh) {
+    scene.remove(myMesh);
+    myMesh.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); });
+    myMesh = makePlayerMesh(equippedSkin, '');
+    scene.add(myMesh);
+    if (currentWeapon) setPlayerWeapon(myMesh, currentWeapon);
+  }
+  // Broadcast skin change
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'skin', skin: equippedSkin }));
+  }
+  renderLockerUI();
+}
+
+function makePlayerMesh(colorOrSkin, name) {
   const group = new THREE.Group();
-  const shirtMat = new THREE.MeshLambertMaterial({ color });
-  const skinMat  = new THREE.MeshLambertMaterial({ color: 0xffd9b3 });
-  const pantsMat = new THREE.MeshLambertMaterial({ color: 0x2a3450 });
-  const bootMat  = new THREE.MeshLambertMaterial({ color: 0x141420 });
+  // Support both old API (number color) and new API (skin object/string)
+  let skinData;
+  if (typeof colorOrSkin === 'string') {
+    skinData = SKINS[colorOrSkin] || SKINS.default;
+  } else if (typeof colorOrSkin === 'object' && colorOrSkin) {
+    skinData = colorOrSkin;
+  } else {
+    skinData = { ...SKINS.default, shirt: colorOrSkin || SKINS.default.shirt };
+  }
+  const shirtMat = new THREE.MeshLambertMaterial({ color: skinData.shirt });
+  const skinMat  = new THREE.MeshLambertMaterial({ color: skinData.skin });
+  const pantsMat = new THREE.MeshLambertMaterial({ color: skinData.pants });
+  const bootMat  = new THREE.MeshLambertMaterial({ color: skinData.boot });
 
   // Torso
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.9, 0.45), shirtMat);
@@ -440,13 +605,37 @@ function setPlayerWeapon(mesh, weapon) {
   mesh.userData.heldWeapon = weapon;
 }
 
-function animatePlayerMesh(mesh, walkingIntensity, t) {
+function animatePlayerMesh(mesh, walkingIntensity, t, playerId) {
   if (!mesh || !mesh.userData) return;
   const { armL, armR, legL, legR, phase } = mesh.userData;
   if (!armL) return;
+  if (mesh.userData._baseY === undefined) mesh.userData._baseY = mesh.position.y;
+
+  // Check if this player is emoting
+  const emote = activeEmotes.get(playerId);
+  if (emote) {
+    const e = EMOTES[emote.name];
+    if (e) {
+      const elapsed = (performance.now() - emote.startedAt) / 1000;
+      if (elapsed * 1000 < e.duration) {
+        // Reset weapon-hold pose; emote owns the limbs this frame
+        applyEmoteFrame(mesh, emote.name, elapsed);
+        // Hide held weapon during emote for cleaner look
+        if (mesh.userData.weaponHolder) mesh.userData.weaponHolder.visible = false;
+        return;
+      } else {
+        activeEmotes.delete(playerId);
+        if (mesh.userData.weaponHolder) mesh.userData.weaponHolder.visible = true;
+        mesh.position.y = mesh.userData._baseY;
+      }
+    }
+  } else {
+    if (mesh.userData.weaponHolder) mesh.userData.weaponHolder.visible = true;
+  }
+
   // Arms locked in "holding weapon forward" pose (don't swing — they hold the gun)
-  armL.rotation.x = 1.3;
-  armR.rotation.x = 1.3;
+  armL.rotation.x = 1.3; armL.rotation.z = 0;
+  armR.rotation.x = 1.3; armR.rotation.z = 0;
   // Legs still swing during walk
   if (walkingIntensity > 0.05) {
     const p = t * 8 + phase;
@@ -512,6 +701,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === kb.weaponSMG) selectWeapon('smg');
   else if (e.code === kb.weaponPump) selectWeapon('pump');
   else if (e.code === kb.weaponSniper) selectWeapon('sniper');
+  else if (e.code === 'KeyB') toggleEmoteMenu();
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -1094,6 +1284,7 @@ function connect() {
   ws.onopen = () => {
     connected = true;
     ws.send(JSON.stringify({ type: 'join', name: me.name }));
+    ws.send(JSON.stringify({ type: 'skin', skin: equippedSkin }));
   };
   ws.onmessage = (ev) => {
     let msg;
@@ -1115,7 +1306,7 @@ function handleMsg(msg) {
     gameState = msg.gameState;
     setLobbyUI(gameState === 'lobby');
     if (!myMesh) {
-      myMesh = makePlayerMesh(colorFor(me.id), '');
+      myMesh = makePlayerMesh(equippedSkin, '');
       scene.add(myMesh);
     }
     clearAllPotions();
@@ -1153,6 +1344,8 @@ function handleMsg(msg) {
     removeChest(msg.chestId);
     statusEl.textContent = '+50 SHIELD +30 HP';
     setTimeout(() => { if (statusEl.textContent === '+50 SHIELD +30 HP') statusEl.textContent = ''; }, 2500);
+  } else if (msg.type === 'playerEmote') {
+    triggerEmote(msg.emote, msg.playerId);
   } else if (msg.type === 'dmg') {
     if (!msg.blocked) {
       spawnDamageNumber(msg.x, msg.y, msg.z, msg.amount, msg.shieldDmg || 0, msg.hpDmg || 0);
@@ -1165,6 +1358,8 @@ function handleMsg(msg) {
     me.kills = msg.kills;
     if (killsHUD) killsHUD.textContent = `Kills: ${me.kills}`;
     playKillSound();
+    addCoins(10); // V-Coins per kill
+    playerStats.kills += 1; saveStats();
   } else if (msg.type === 'shot') {
     spawnShotEffect(msg, msg.shooterId === me.id);
   } else if (msg.type === 'kill') {
@@ -1216,10 +1411,18 @@ function handleMsg(msg) {
     statusEl.textContent = 'Round started! Find blue potions for shield.';
     setTimeout(() => { if (statusEl.textContent.startsWith('Round started')) statusEl.textContent = ''; }, 4000);
     updateHpUI();
+    // Match participation reward
+    addCoins(5);
+    playerStats.matches += 1; saveStats();
   } else if (msg.type === 'gameover') {
     gameState = 'ended';
     if (msg.winner) {
       winSub.textContent = msg.winner.id === me.id ? 'You won!' : `Winner: ${msg.winner.name}`;
+      if (msg.winner.id === me.id) {
+        addCoins(100); // Big bonus for winning
+        playerStats.wins += 1; saveStats();
+        winSub.textContent = 'VICTORY! +100 V$';
+      }
     } else {
       winSub.textContent = 'No survivors.';
     }
@@ -1261,9 +1464,20 @@ function updateFromState(playersArr) {
     }
     let op = otherPlayers.get(p.id);
     if (!op) {
-      const mesh = makePlayerMesh(colorFor(p.id), p.name);
+      const skinKey = p.skin && SKINS[p.skin] ? p.skin : null;
+      const skinArg = skinKey || colorFor(p.id);
+      const mesh = makePlayerMesh(skinArg, p.name);
       scene.add(mesh);
-      op = { mesh, x: p.x, y: p.y, z: p.z, rotY: p.rotY, targetX: p.x, targetY: p.y, targetZ: p.z, targetRot: p.rotY, name: p.name, alive: p.alive };
+      op = { mesh, x: p.x, y: p.y, z: p.z, rotY: p.rotY, targetX: p.x, targetY: p.y, targetZ: p.z, targetRot: p.rotY, name: p.name, alive: p.alive, skin: p.skin || null };
+      otherPlayers.set(p.id, op);
+    } else if (p.skin && p.skin !== op.skin && SKINS[p.skin]) {
+      // Skin changed - rebuild mesh
+      scene.remove(op.mesh);
+      op.mesh.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); });
+      op.mesh = makePlayerMesh(p.skin, p.name);
+      scene.add(op.mesh);
+      if (p.weapon) setPlayerWeapon(op.mesh, p.weapon);
+      op.skin = p.skin;
       otherPlayers.set(p.id, op);
     }
     op.targetX = p.x; op.targetY = p.y; op.targetZ = p.z; op.targetRot = p.rotY;
@@ -1494,7 +1708,7 @@ function update(dt) {
     myMesh.visible = me.alive;
     const moved = Math.hypot(me.x - myPrevPos.x, me.z - myPrevPos.z);
     myPrevPos.x = me.x; myPrevPos.z = me.z;
-    animatePlayerMesh(myMesh, moved / 0.15, clock.elapsedTime);
+    animatePlayerMesh(myMesh, moved / 0.15, clock.elapsedTime, me.id);
   }
 
   // Network send
@@ -1510,7 +1724,7 @@ function update(dt) {
 
 function interpolateOthers(dt) {
   const lerp = Math.min(1, dt * 12);
-  for (const op of otherPlayers.values()) {
+  for (const [id, op] of otherPlayers) {
     const oldX = op.x, oldZ = op.z;
     op.x += (op.targetX - op.x) * lerp;
     op.y += (op.targetY - op.y) * lerp;
@@ -1522,7 +1736,7 @@ function interpolateOthers(dt) {
     op.mesh.position.set(op.x, op.y, op.z);
     op.mesh.rotation.y = op.rotY;
     const movedR = Math.hypot(op.x - oldX, op.z - oldZ);
-    animatePlayerMesh(op.mesh, movedR / (dt * 6), clock.elapsedTime);
+    animatePlayerMesh(op.mesh, movedR / (dt * 6), clock.elapsedTime, id);
   }
 }
 
@@ -1756,6 +1970,19 @@ document.querySelectorAll('[data-act]').forEach((btn) => {
       else canvas.requestPointerLock();
     }
     else if (act === 'settings') openSettings();
+    else if (act === 'locker') {
+      closeMenus();
+      const panel = document.getElementById('lockerPanel');
+      if (panel) panel.classList.remove('hidden');
+      renderLockerUI();
+      menuOpen = true;
+    }
+    else if (act === 'closeLocker') {
+      const panel = document.getElementById('lockerPanel');
+      if (panel) panel.classList.add('hidden');
+      menuOpen = false;
+      if (!isTouchDevice && me.alive && gameState === 'playing') canvas.requestPointerLock();
+    }
     else if (act === 'back') backToPause();
     else if (act === 'reset') {
       Object.assign(settings, DEFAULT_SETTINGS);
@@ -1827,6 +2054,27 @@ if (startMatchBtn) {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'startMatch' }));
   });
 }
+
+const lockerBtnEl = document.getElementById('lockerBtn');
+if (lockerBtnEl) {
+  lockerBtnEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = document.getElementById('lockerPanel');
+    if (panel) panel.classList.remove('hidden');
+    renderLockerUI();
+  });
+}
+
+// Emote menu wiring
+document.querySelectorAll('.emoteOption').forEach((el) => {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    sendEmote(el.dataset.emote);
+  });
+});
+
+// Init coin UI on load
+updateCoinsUI();
 
 playBtn.addEventListener('click', () => {
   const n = (nameInput.value || '').trim().slice(0, 16) || 'Player';

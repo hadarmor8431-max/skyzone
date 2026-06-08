@@ -38,6 +38,7 @@
     <div id="topbar">
       <div id="alive">Alive: 1</div>
       <div id="killsHUD">Kills: 0</div>
+      <div id="vcoinsHUD">V$ 100</div>
       <div id="zoneInfo">Zone: <span id="zoneR">--</span>m &middot; <span id="zoneTimer">--</span>s</div>
       <div id="status"></div>
     </div>
@@ -57,7 +58,31 @@
     <div id="lobbyPanel">
       <div class="lobbyTitle">LOBBY &mdash; waiting for match to start</div>
       <button id="startMatchBtn">START MATCH</button>
-      <div class="lobbyHint">Anyone can start the match. Bullets do no damage in the lobby.</div>
+      <button id="lockerBtn">🎽 LOCKER</button>
+      <div class="lobbyHint">Press <b>B</b> for emotes. Anyone can start the match. No damage in lobby.</div>
+    </div>
+
+    <div id="emoteMenu" class="hidden">
+      <div class="emoteRing">
+        <div class="emoteOption" data-emote="wave">👋 Wave</div>
+        <div class="emoteOption" data-emote="spin">🌀 Spin</div>
+        <div class="emoteOption" data-emote="floss">💃 Floss</div>
+        <div class="emoteOption" data-emote="dab">🙌 Dab</div>
+      </div>
+      <div class="emoteHint">B to close</div>
+    </div>
+
+    <div id="lockerPanel" class="hidden menuOverlay">
+      <div class="menuBox lockerBox">
+        <div class="menuTitle">🎽 LOCKER</div>
+        <div class="lockerCoins">Coins: <span id="lockerCoinsVal">100</span> V$</div>
+        <div id="lockerStats" class="lockerStatsRow"></div>
+        <div class="sectionDivider">SKINS</div>
+        <div id="lockerSkinGrid" class="skinGrid"></div>
+        <div class="settingsActions">
+          <button class="menuBtn small primary" data-act="closeLocker">CLOSE</button>
+        </div>
+      </div>
     </div>
     <div id="scopeOverlay">
       <div class="scopeRing"></div>
@@ -117,6 +142,7 @@
         <div class="menuTitle">PAUSED</div>
         <div class="menuSub">Online match — the world keeps moving</div>
         <button class="menuBtn primary" data-act="resume">RESUME</button>
+        <button class="menuBtn" data-act="locker">🎽 LOCKER</button>
         <button class="menuBtn" data-act="settings">SETTINGS</button>
         <button class="menuBtn danger" data-act="quit">QUIT TO LOBBY</button>
       </div>

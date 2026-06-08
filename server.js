@@ -318,7 +318,7 @@ function tick() {
   // Broadcast state
   const snapshot = [];
   for (const [id, p] of players) {
-    snapshot.push({ id, name: p.name, x: p.x, y: p.y, z: p.z, rotY: p.rotY, hp: p.hp, shield: p.shield, alive: p.alive, weapon: p.currentWeapon, protectedUntil: p.protectedUntil });
+    snapshot.push({ id, name: p.name, x: p.x, y: p.y, z: p.z, rotY: p.rotY, hp: p.hp, shield: p.shield, alive: p.alive, weapon: p.currentWeapon, protectedUntil: p.protectedUntil, skin: p.skin });
   }
   broadcast({ type: 'state', players: snapshot, t: now, nextShrinkAt: lastShrink + ZONE_SHRINK_INTERVAL_MS });
 }
@@ -516,6 +516,8 @@ wss.on('connection', (ws) => {
     currentWeapon: 'ar',
     kills: 0,
     protectedUntil: 0,
+    skin: 'default',
+    emote: null, // { name, until }
   };
   players.set(id, p);
 
@@ -550,6 +552,14 @@ wss.on('connection', (ws) => {
       broadcast({ type: 'joined', id, name: player.name });
     } else if (msg.type === 'startMatch') {
       if (gameState === 'lobby') startGame();
+    } else if (msg.type === 'skin') {
+      if (typeof msg.skin === 'string') player.skin = msg.skin.slice(0, 20);
+    } else if (msg.type === 'emote') {
+      if (typeof msg.emote === 'string') {
+        const eName = msg.emote.slice(0, 20);
+        player.emote = { name: eName, until: Date.now() + 4000 };
+        broadcast({ type: 'playerEmote', playerId: id, emote: eName, startedAt: Date.now() });
+      }
     } else if (msg.type === 'move') {
       if (!player.alive) return;
       // Clamp to map

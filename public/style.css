@@ -128,6 +128,7 @@ canvas#game {
 
 #alive { color: #6bb7ff; }
 #killsHUD { color: #ff9a55; }
+#vcoinsHUD { color: #ffd700; font-weight: 800; }
 #zoneInfo { color: #c084fc; }
 #zoneTimer { color: #ffd66b; font-weight: 800; }
 #status { color: #ffd66b; }
@@ -301,6 +302,112 @@ body.in-lobby #lobbyPanel { display: block; }
 /* Hide zone info / spawn protect in lobby */
 body.in-lobby #zoneInfo,
 body.in-lobby #spawnProtect { display: none; }
+
+/* ---------- LOCKER / EMOTES / V-COINS ---------- */
+#lockerBtn {
+  background: linear-gradient(90deg, #ffd700, #ff9a55);
+  color: #2a1a00;
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 2px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-top: 8px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+#lockerBtn:hover { filter: brightness(1.1); }
+
+.lockerBox { min-width: 560px; max-width: 700px; }
+.lockerCoins {
+  color: #ffd700;
+  font-size: 16px;
+  font-weight: 800;
+  margin: 4px 0 8px;
+  text-align: center;
+}
+.lockerStatsRow {
+  color: #c5d3e8;
+  font-size: 12px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+.lockerStatsRow b { color: #6bb7ff; }
+
+.skinGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 8px 0 16px;
+}
+.skinCard {
+  background: rgba(10, 14, 26, 0.8);
+  border: 2px solid #2a3a5e;
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.skinCard:hover { border-color: #4a6aa0; transform: translateY(-2px); }
+.skinCard.equipped {
+  border-color: #6bff8a;
+  background: rgba(30, 80, 50, 0.85);
+  box-shadow: 0 0 16px rgba(107, 255, 138, 0.35);
+}
+.skinCard.locked { opacity: 0.7; }
+.skinCard.owned { border-color: #6bb7ff; }
+.skinSwatch {
+  width: 60px;
+  height: 80px;
+  margin: 0 auto 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.skinName { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+.skinAction { font-size: 11px; font-weight: 700; color: #ffd700; margin-top: 4px; letter-spacing: 1px; }
+.skinCard.equipped .skinAction { color: #6bff8a; }
+.skinCard.owned .skinAction { color: #6bb7ff; }
+
+#emoteMenu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 30;
+  pointer-events: auto;
+}
+.emoteRing {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 24px;
+}
+.emoteOption {
+  background: rgba(15, 22, 40, 0.95);
+  border: 2px solid #6bb7ff;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  padding: 24px 36px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  transition: transform 0.1s, background 0.15s;
+}
+.emoteOption:hover {
+  background: rgba(40, 80, 150, 0.95);
+  transform: scale(1.05);
+}
+.emoteHint { color: #8a9bb8; margin-top: 16px; font-size: 12px; letter-spacing: 2px; }
 
 /* ---------- SNIPER SCOPE ---------- */
 #scopeOverlay {
