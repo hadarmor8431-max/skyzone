@@ -31,7 +31,7 @@ const CHEST_HP_BONUS = 30;
 
 // Lobby
 const LOBBY_CENTER = { x: -210, z: -210 };
-const LOBBY_SIZE = 40; // half-extent
+const LOBBY_SIZE = 60; // half-extent (bigger lobby)
 
 const app = express();
 // Disable caching so deploys are picked up immediately by clients
@@ -142,6 +142,13 @@ function startGame() {
   potions = generatePotions();
   chests = generateChests();
   const now = Date.now();
+  broadcast({
+    type: 'gamestart',
+    zone, obstacles, potions, chests,
+    shrinkInterval: ZONE_SHRINK_INTERVAL_MS,
+    spawnProtectionMs: SPAWN_PROTECTION_MS,
+    skyDropHeight: SKY_DROP_HEIGHT,
+  });
   for (const p of players.values()) {
     const pos = spawnPos();
     p.x = pos.x; p.y = SKY_DROP_HEIGHT; p.z = pos.z; // SKY DROP — spawn high
@@ -151,14 +158,9 @@ function startGame() {
     p.rotY = 0;
     p.kills = 0;
     p.protectedUntil = now + SPAWN_PROTECTION_MS;
+    // Tell THIS player their new position so client can teleport
+    send(p.ws, { type: 'spawn', x: p.x, y: p.y, z: p.z });
   }
-  broadcast({
-    type: 'gamestart',
-    zone, obstacles, potions, chests,
-    shrinkInterval: ZONE_SHRINK_INTERVAL_MS,
-    spawnProtectionMs: SPAWN_PROTECTION_MS,
-    skyDropHeight: SKY_DROP_HEIGHT,
-  });
 }
 
 function generatePotions() {
@@ -226,6 +228,7 @@ function endGame(winnerId) {
 function returnToLobby() {
   gameState = 'lobby';
   winnerInfo = null;
+  broadcast({ type: 'lobby', center: LOBBY_CENTER, size: LOBBY_SIZE });
   for (const p of players.values()) {
     const pos = lobbySpawnPos();
     p.x = pos.x; p.y = pos.y; p.z = pos.z;
@@ -234,8 +237,8 @@ function returnToLobby() {
     p.alive = true;
     p.kills = 0;
     p.protectedUntil = 0;
+    send(p.ws, { type: 'spawn', x: p.x, y: p.y, z: p.z });
   }
-  broadcast({ type: 'lobby', center: LOBBY_CENTER, size: LOBBY_SIZE });
 }
 
 function tick() {
@@ -549,6 +552,7 @@ wss.on('connection', (ws) => {
       player.hp = MAX_HP;
       player.shield = 0;
       player.alive = true;
+      send(ws, { type: 'spawn', x: player.x, y: player.y, z: player.z });
       broadcast({ type: 'joined', id, name: player.name });
     } else if (msg.type === 'startMatch') {
       if (gameState === 'lobby') startGame();

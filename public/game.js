@@ -1317,6 +1317,9 @@ function handleMsg(msg) {
     if (msg.chests) {
       for (const c of msg.chests) spawnChest(c.id, c.x, c.z);
     }
+    if (msg.lobbyCenter && msg.lobbySize) {
+      buildLobbyDecor(msg.lobbyCenter.x, msg.lobbyCenter.z, msg.lobbySize);
+    }
   } else if (msg.type === 'lobby') {
     gameState = 'lobby';
     setLobbyUI(true);
@@ -1346,6 +1349,14 @@ function handleMsg(msg) {
     setTimeout(() => { if (statusEl.textContent === '+50 SHIELD +30 HP') statusEl.textContent = ''; }, 2500);
   } else if (msg.type === 'playerEmote') {
     triggerEmote(msg.emote, msg.playerId);
+  } else if (msg.type === 'spawn') {
+    // Server teleported me (match start / lobby return / first join)
+    me.x = msg.x;
+    me.y = msg.y;
+    me.z = msg.z;
+    me.vy = 0;
+    me.onGround = msg.y <= 0.1;
+    myPrevPos.x = me.x; myPrevPos.z = me.z;
   } else if (msg.type === 'dmg') {
     if (!msg.blocked) {
       spawnDamageNumber(msg.x, msg.y, msg.z, msg.amount, msg.shieldDmg || 0, msg.hpDmg || 0);
@@ -1589,6 +1600,96 @@ function setLobbyUI(inLobby) {
   zoneMesh.visible = !inLobby;
 }
 
+let lobbyDecor = null;
+function buildLobbyDecor(centerX, centerZ, size) {
+  if (lobbyDecor) {
+    scene.remove(lobbyDecor);
+    lobbyDecor.traverse((n) => { if (n.geometry) n.geometry.dispose(); if (n.material) n.material.dispose(); });
+  }
+  const group = new THREE.Group();
+
+  // Central glowing stage
+  const stage = new THREE.Mesh(
+    new THREE.CylinderGeometry(5, 5.5, 0.3, 24),
+    new THREE.MeshLambertMaterial({ color: 0x4f8fff, emissive: 0x2a4fcc, emissiveIntensity: 0.6 })
+  );
+  stage.position.set(centerX, 0.15, centerZ);
+  group.add(stage);
+
+  // Inner ring on the stage
+  const ring = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.5, 3.5, 0.32, 24),
+    new THREE.MeshLambertMaterial({ color: 0xc084fc, emissive: 0x6a3fcc, emissiveIntensity: 0.7 })
+  );
+  ring.position.set(centerX, 0.17, centerZ);
+  group.add(ring);
+
+  // 4 tall glowing pillars around the stage
+  for (let i = 0; i < 4; i++) {
+    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const pillar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.35, 6, 8),
+      new THREE.MeshLambertMaterial({ color: 0xff9a55, emissive: 0xcc5a18, emissiveIntensity: 0.7 })
+    );
+    pillar.position.set(centerX + Math.cos(ang) * 6, 3, centerZ + Math.sin(ang) * 6);
+    group.add(pillar);
+    // Glow ball on top
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xffd700 })
+    );
+    ball.position.set(centerX + Math.cos(ang) * 6, 6.4, centerZ + Math.sin(ang) * 6);
+    group.add(ball);
+    const light = new THREE.PointLight(0xffaa55, 1.4, 12);
+    light.position.set(centerX + Math.cos(ang) * 6, 5.5, centerZ + Math.sin(ang) * 6);
+    group.add(light);
+  }
+
+  // 5 target dummies for practice — humanoid-shaped colored boxes
+  const dummyConfigs = [
+    { dx: -size * 0.65, dz: -size * 0.65, color: 0xff4444 },
+    { dx: +size * 0.65, dz: -size * 0.65, color: 0x44ff44 },
+    { dx: -size * 0.65, dz: +size * 0.65, color: 0xffeb55 },
+    { dx: +size * 0.65, dz: +size * 0.65, color: 0x44d6ff },
+    { dx: 0,            dz: -size * 0.8,  color: 0xff8800 },
+  ];
+  for (const d of dummyConfigs) {
+    const dummy = new THREE.Group();
+    const torso = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 0.9, 0.45),
+      new THREE.MeshLambertMaterial({ color: d.color })
+    );
+    torso.position.y = 1.35;
+    dummy.add(torso);
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.55, 0.55),
+      new THREE.MeshLambertMaterial({ color: 0xffd9b3 })
+    );
+    head.position.y = 2.1;
+    dummy.add(head);
+    // Legs (one block, simpler)
+    const legs = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 0.9, 0.4),
+      new THREE.MeshLambertMaterial({ color: 0x2a3450 })
+    );
+    legs.position.y = 0.45;
+    dummy.add(legs);
+    // Stand/base
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1, 0.15, 12),
+      new THREE.MeshLambertMaterial({ color: 0x444a55 })
+    );
+    base.position.y = 0.075;
+    dummy.add(base);
+    dummy.position.set(centerX + d.dx, 0, centerZ + d.dz);
+    dummy.rotation.y = Math.atan2(-d.dx, -d.dz); // Face the center
+    group.add(dummy);
+  }
+
+  scene.add(group);
+  lobbyDecor = group;
+}
+
 function updateHpUI() {
   const hpPct = Math.max(0, Math.min(100, me.hp));
   hpFill.style.width = `${hpPct}%`;
@@ -1647,8 +1748,9 @@ function update(dt) {
   // Normalize touch joystick magnitude (don't exceed 1)
   if (stickMag > 1) { mx /= stickMag; mz /= stickMag; }
 
-  // Continuous fire on hold — AR only (pump/sniper require a fresh click/tap)
-  if (!inputBlocked && currentWeapon === 'ar') {
+  // Continuous fire on hold — auto-weapons only (pump/sniper require a fresh click/tap)
+  const isAutoWeapon = currentWeapon === 'ar' || currentWeapon === 'smg';
+  if (!inputBlocked && isAutoWeapon) {
     if (mouseHeld && pointerLocked) fireShot();
     if (touchFiring) fireShot();
   }
