@@ -695,6 +695,21 @@ body.touch { touch-action: none; -webkit-user-select: none; user-select: none; }
   border-color: #ffe08a;
 }
 
+#touchCrouch {
+  bottom: 30px;
+  right: 260px;
+  width: 78px;
+  height: 78px;
+  font-size: 14px;
+  border-color: rgba(150, 200, 255, 0.7);
+  background: rgba(20, 40, 60, 0.7);
+}
+#touchCrouch.active {
+  background: rgba(107, 183, 255, 0.85);
+  color: #001624;
+  border-color: #b5dcff;
+}
+
 /* Slight visual change on crosshair when aiming (small dot) */
 body.aiming:not(.scoped) #crosshair {
   font-size: 12px;

@@ -321,7 +321,7 @@ function tick() {
   // Broadcast state
   const snapshot = [];
   for (const [id, p] of players) {
-    snapshot.push({ id, name: p.name, x: p.x, y: p.y, z: p.z, rotY: p.rotY, hp: p.hp, shield: p.shield, alive: p.alive, weapon: p.currentWeapon, protectedUntil: p.protectedUntil, skin: p.skin });
+    snapshot.push({ id, name: p.name, x: p.x, y: p.y, z: p.z, rotY: p.rotY, hp: p.hp, shield: p.shield, alive: p.alive, weapon: p.currentWeapon, protectedUntil: p.protectedUntil, skin: p.skin, crouching: p.crouching });
   }
   broadcast({ type: 'state', players: snapshot, t: now, nextShrinkAt: lastShrink + ZONE_SHRINK_INTERVAL_MS });
 }
@@ -422,13 +422,17 @@ function handleShoot(shooterId, msg) {
     let hitWasHeadshot = false;
     for (const [id, p] of players) {
       if (id === shooterId || !p.alive) continue;
-      const t = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, p.y + 1, p.z, 0.9);
+      // Crouching lowers the hit sphere and shrinks its center
+      const centerY = p.y + (p.crouching ? 0.7 : 1);
+      const radius = p.crouching ? 0.75 : 0.9;
+      const t = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, centerY, p.z, radius);
       if (t !== null && t > 0 && t < bestT) {
         bestT = t;
         hitId = id;
-        // Compute hit Y to detect headshots — head zone is upper ~25% of player capsule
+        // Head zone threshold changes when crouching
+        const headThreshold = p.crouching ? 1.05 : 1.55;
         const hitY = oy + pdy * t;
-        hitWasHeadshot = hitY > (p.y + 1.55);
+        hitWasHeadshot = hitY > (p.y + headThreshold);
       }
     }
     pelletResults.push({
@@ -521,6 +525,7 @@ wss.on('connection', (ws) => {
     protectedUntil: 0,
     skin: 'default',
     emote: null, // { name, until }
+    crouching: false,
   };
   players.set(id, p);
 
@@ -570,8 +575,9 @@ wss.on('connection', (ws) => {
       const half = MAP_SIZE / 2;
       player.x = Math.max(-half, Math.min(half, +msg.x || 0));
       player.z = Math.max(-half, Math.min(half, +msg.z || 0));
-      player.y = Math.max(0, Math.min(20, +msg.y || 0));
+      player.y = Math.max(0, Math.min(SKY_DROP_HEIGHT + 5, +msg.y || 0));
       player.rotY = +msg.rotY || 0;
+      player.crouching = !!msg.crouching;
     } else if (msg.type === 'shoot') {
       handleShoot(id, msg);
     } else if (msg.type === 'weapon') {

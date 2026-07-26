@@ -692,6 +692,7 @@ const joystick = {
 };
 const look = { touchId: null, lastX: 0, lastY: 0 };
 let touchFiring = false;
+let touchCrouch = false;
 
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
@@ -877,6 +878,16 @@ if (isTouchDevice) {
       aiming = false;
       aimBtn.classList.remove('active');
       updateScope();
+    });
+  }
+
+  const crouchBtn = document.getElementById('touchCrouch');
+  if (crouchBtn) {
+    // Toggle-on-tap for crouch (easier on mobile than hold)
+    crouchBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      touchCrouch = !touchCrouch;
+      crouchBtn.classList.toggle('active', touchCrouch);
     });
   }
 
@@ -1612,6 +1623,7 @@ function updateFromState(playersArr) {
     op.targetX = p.x; op.targetY = p.y; op.targetZ = p.z; op.targetRot = p.rotY;
     op.alive = p.alive;
     op.mesh.visible = p.alive;
+    op.crouching = !!p.crouching;
     if (p.weapon) setPlayerWeapon(op.mesh, p.weapon);
   }
   // Remove disconnected
@@ -1861,8 +1873,10 @@ function update(dt) {
     }
   }
   // Sprint: keyboard shift, or touch joystick pushed > 85%
-  const sprinting = (keys['ShiftLeft'] || keys['ShiftRight']) || (isTouchDevice && stickMag > 0.85);
-  const speed = sprinting ? 10 : 6;
+  const crouching = keys['ControlLeft'] || keys['ControlRight'] || touchCrouch;
+  const sprinting = ((keys['ShiftLeft'] || keys['ShiftRight']) || (isTouchDevice && stickMag > 0.85)) && !crouching;
+  const speed = crouching ? 3 : (sprinting ? 10 : 6);
+  me.crouching = !!crouching;
   // Normalize touch joystick magnitude (don't exceed 1)
   if (stickMag > 1) { mx /= stickMag; mz /= stickMag; }
 
@@ -1900,7 +1914,7 @@ function update(dt) {
   // Third-person over-the-shoulder camera with proper pitch
   const camDist = settings.camDist;
   const shoulder = settings.leftShoulder ? -0.85 : 0.85;
-  const pivotY = me.y + 1.5;
+  const pivotY = me.y + (me.crouching ? 1.0 : 1.5);
   const sh = Math.sin(me.rotY), ch = Math.cos(me.rotY);
   const sp = Math.sin(me.pitch), cp = Math.cos(me.pitch);
   // Aim direction (where the player is looking)
@@ -1926,6 +1940,7 @@ function update(dt) {
     myMesh.position.set(me.x, me.y, me.z);
     myMesh.rotation.y = me.rotY;
     myMesh.visible = me.alive;
+    myMesh.scale.y = me.crouching ? 0.65 : 1;
     const moved = Math.hypot(me.x - myPrevPos.x, me.z - myPrevPos.z);
     myPrevPos.x = me.x; myPrevPos.z = me.z;
     animatePlayerMesh(myMesh, moved / 0.15, clock.elapsedTime, me.id);
@@ -1938,6 +1953,7 @@ function update(dt) {
     ws.send(JSON.stringify({
       type: 'move',
       x: me.x, y: me.y, z: me.z, rotY: me.rotY,
+      crouching: !!me.crouching,
     }));
   }
 }
@@ -1955,6 +1971,7 @@ function interpolateOthers(dt) {
     op.rotY += dr * lerp;
     op.mesh.position.set(op.x, op.y, op.z);
     op.mesh.rotation.y = op.rotY;
+    op.mesh.scale.y = op.crouching ? 0.65 : 1;
     const movedR = Math.hypot(op.x - oldX, op.z - oldZ);
     animatePlayerMesh(op.mesh, movedR / (dt * 6), clock.elapsedTime, id);
   }
