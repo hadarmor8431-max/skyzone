@@ -469,6 +469,159 @@ body.in-lobby #spawnProtect { display: none; }
 }
 .emoteHint { color: #8a9bb8; margin-top: 16px; font-size: 12px; letter-spacing: 2px; }
 
+.emoteOption.rare {
+  border-color: #ffd700;
+  color: #ffd700;
+  background: rgba(60, 50, 10, 0.85);
+  box-shadow: 0 0 16px rgba(255, 215, 0, 0.35);
+}
+.emoteOption.rare:hover {
+  background: rgba(140, 110, 20, 0.95);
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.6);
+}
+
+/* ---------- END-GAME PODIUM ---------- */
+#podium {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(30, 25, 60, 0.95) 0%, rgba(5, 8, 16, 0.98) 100%);
+  z-index: 40;
+  pointer-events: auto;
+  animation: podiumFadeIn 0.6s ease-out;
+}
+#podium.show { display: flex; }
+@keyframes podiumFadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.podiumTitle {
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 8px;
+  background: linear-gradient(90deg, #ffd700, #ff9a55, #ff5f5f);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 40px;
+  text-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+}
+
+.podiumStand {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.podiumSlot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 160px;
+}
+
+.podiumBox {
+  width: 140px;
+  background: rgba(30, 40, 65, 0.9);
+  border: 2px solid #2a3a5e;
+  border-radius: 12px 12px 4px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 72px;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 4px 8px rgba(0,0,0,0.5);
+  animation: podiumRise 0.9s ease-out;
+}
+.podiumSlot .podiumRank { }
+
+.podiumSlot.first .podiumBox {
+  height: 220px;
+  background: linear-gradient(180deg, #ffd700 0%, #cc9900 100%);
+  border-color: #ffe066;
+  box-shadow: 0 0 40px rgba(255, 215, 0, 0.6);
+  color: #2a1a00;
+}
+.podiumSlot.second .podiumBox {
+  height: 160px;
+  background: linear-gradient(180deg, #c0c8d0 0%, #808890 100%);
+  border-color: #d0d8e0;
+  box-shadow: 0 0 24px rgba(192, 200, 208, 0.5);
+  color: #1a1a20;
+}
+.podiumSlot.third .podiumBox {
+  height: 120px;
+  background: linear-gradient(180deg, #cd7f32 0%, #8b5a1e 100%);
+  border-color: #e09044;
+  box-shadow: 0 0 20px rgba(205, 127, 50, 0.5);
+  color: #2a1500;
+}
+
+.podiumSlot .podiumName {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  margin-top: 14px;
+  letter-spacing: 1px;
+}
+.podiumSlot .podiumKills {
+  font-size: 13px;
+  color: #ff9a55;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.crown {
+  font-size: 36px;
+  margin-bottom: 6px;
+  animation: crownBob 1.6s ease-in-out infinite;
+}
+@keyframes crownBob {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes podiumRise {
+  0% { transform: translateY(120%); }
+  100% { transform: translateY(0); }
+}
+.podiumSlot.first  .podiumBox { animation-delay: 0.6s; animation-fill-mode: backwards; }
+.podiumSlot.second .podiumBox { animation-delay: 0.3s; animation-fill-mode: backwards; }
+.podiumSlot.third  .podiumBox { animation-delay: 0.0s; animation-fill-mode: backwards; }
+
+#podiumRest {
+  color: #8a9bb8;
+  font-size: 13px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin: 12px 0 24px;
+  text-align: center;
+}
+.restRow {
+  padding: 3px 12px;
+  color: #c5d3e8;
+}
+.restRow .placeNum { color: #6bb7ff; font-weight: 700; margin-right: 6px; }
+
+#podiumClose {
+  background: linear-gradient(90deg, #4f8fff, #9b5bff);
+  color: #fff;
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: 3px;
+  padding: 14px 44px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+#podiumClose:hover { filter: brightness(1.15); }
+
 /* ---------- SNIPER SCOPE ---------- */
 #scopeOverlay {
   position: absolute;

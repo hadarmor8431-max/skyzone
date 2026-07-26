@@ -299,10 +299,13 @@ const SKINS = {
 };
 
 const EMOTES = {
-  wave:  { name: 'Wave',  duration: 2500 },
-  spin:  { name: 'Spin',  duration: 3000 },
-  floss: { name: 'Floss', duration: 3000 },
-  dab:   { name: 'Dab',   duration: 2000 },
+  wave:     { name: 'Wave',         duration: 2500 },
+  spin:     { name: 'Spin',         duration: 3000 },
+  floss:    { name: 'Floss',        duration: 3000 },
+  dab:      { name: 'Dab',          duration: 2000 },
+  takel:    { name: 'Take the L',   duration: 4000, rare: true },
+  defdance: { name: 'Default Dance',duration: 4000, rare: true },
+  pony:     { name: 'Ride the Pony',duration: 3500, rare: true },
 };
 
 function applyEmoteFrame(mesh, emoteName, t) {
@@ -328,6 +331,55 @@ function applyEmoteFrame(mesh, emoteName, t) {
   } else if (emoteName === 'dab') {
     armL.rotation.x = -2.0; armL.rotation.z = 0.5;
     armR.rotation.x = -1.5; armR.rotation.z = -0.9;
+  } else if (emoteName === 'takel') {
+    // Take the L (Fortnite): side sway + L arm on forehead + leg kicks
+    const ph = t * 5.5; // sway speed
+    const sway = Math.sin(ph);
+    // Body tilts left/right rhythmically
+    mesh.rotation.z = sway * 0.22;
+    // Small hop each sway
+    mesh.position.y = mesh.userData._baseY + Math.abs(Math.sin(ph * 2)) * 0.08;
+    // Left arm forms an "L" at the forehead
+    armL.rotation.x = -2.2;    // arm up and forward
+    armL.rotation.z = 0.9;     // rotated inward so hand is at forehead
+    // Right arm at hip
+    armR.rotation.x = 0.35;
+    armR.rotation.z = -0.15;
+    // Legs kick alternately outward with the sway
+    legL.rotation.z = -sway * 0.35;
+    legR.rotation.z = -sway * 0.35;
+    legL.rotation.x = -sway * 0.25;
+    legR.rotation.x = sway * 0.25;
+  } else if (emoteName === 'defdance') {
+    // Default Dance: arms swinging up, hip bounces
+    const ph = t * 6;
+    const bounce = Math.abs(Math.sin(ph));
+    mesh.position.y = mesh.userData._baseY + bounce * 0.12;
+    // Arms swing up and back down
+    armL.rotation.x = -1.2 - Math.sin(ph) * 0.6;
+    armR.rotation.x = -1.2 + Math.sin(ph) * 0.6;
+    armL.rotation.z = -0.25;
+    armR.rotation.z = 0.25;
+    // Slight hip sway
+    mesh.rotation.z = Math.sin(ph * 0.5) * 0.06;
+    // Legs alternating step
+    legL.rotation.x = Math.sin(ph) * 0.35;
+    legR.rotation.x = -Math.sin(ph) * 0.35;
+  } else if (emoteName === 'pony') {
+    // Ride the Pony: jumping in place, hands holding invisible reins
+    const ph = t * 5;
+    const jump = Math.max(0, Math.sin(ph));
+    mesh.position.y = mesh.userData._baseY + jump * 0.35;
+    // Both arms held out in front like holding reins, bobbing with jump
+    armL.rotation.x = -1.5 + jump * 0.3;
+    armL.rotation.z = -0.15;
+    armR.rotation.x = -1.5 + jump * 0.3;
+    armR.rotation.z = 0.15;
+    // Legs bend on jump apex
+    legL.rotation.x = jump * 0.5;
+    legR.rotation.x = jump * 0.5;
+    // Slight forward lean
+    mesh.rotation.x = jump * 0.15;
   }
 }
 
@@ -648,10 +700,17 @@ function animatePlayerMesh(mesh, walkingIntensity, t, playerId) {
         activeEmotes.delete(playerId);
         if (mesh.userData.weaponHolder) mesh.userData.weaponHolder.visible = true;
         mesh.position.y = mesh.userData._baseY;
+        mesh.rotation.x = 0; mesh.rotation.z = 0;
+        legL.rotation.z = 0; legR.rotation.z = 0;
       }
     }
   } else {
     if (mesh.userData.weaponHolder) mesh.userData.weaponHolder.visible = true;
+    // Ensure lingering emote transforms are cleared
+    if (mesh.rotation.x !== 0) mesh.rotation.x = 0;
+    if (mesh.rotation.z !== 0) mesh.rotation.z = 0;
+    if (legL.rotation.z !== 0) legL.rotation.z = 0;
+    if (legR.rotation.z !== 0) legR.rotation.z = 0;
   }
 
   // Arms locked in "holding weapon forward" pose (don't swing — they hold the gun)
@@ -1577,6 +1636,7 @@ function handleMsg(msg) {
   } else if (msg.type === 'lobby') {
     gameState = 'lobby';
     setLobbyUI(true);
+    hidePodium();
     statusEl.textContent = 'Returned to lobby';
     setTimeout(() => { if (statusEl.textContent === 'Returned to lobby') statusEl.textContent = ''; }, 3000);
   } else if (msg.type === 'state') {
@@ -1682,17 +1742,15 @@ function handleMsg(msg) {
   } else if (msg.type === 'gameover') {
     gameState = 'ended';
     if (msg.winner) {
-      winSub.textContent = msg.winner.id === me.id ? 'You won!' : `Winner: ${msg.winner.name}`;
       if (msg.winner.id === me.id) {
-        addCoins(100); // Big bonus for winning
+        addCoins(100);
         playerStats.wins += 1; saveStats();
-        winSub.textContent = 'VICTORY! +100 V$';
       }
-    } else {
-      winSub.textContent = 'No survivors.';
     }
-    winOverlay.classList.remove('hidden');
+    // Show the leaderboard podium instead of the plain VICTORY overlay
+    showPodium(msg.results || []);
     deathOverlay.classList.add('hidden');
+    winOverlay.classList.add('hidden');
     closeMenus();
     if (pointerLocked) document.exitPointerLock();
   } else if (msg.type === 'left') {
@@ -1839,6 +1897,49 @@ function updateSpawnProtectUI() {
   if (!spawnProtect) return;
   const isProtected = me.alive && me.protectedUntil > Date.now();
   spawnProtect.classList.toggle('hidden', !isProtected);
+}
+
+function showPodium(results) {
+  const podium = document.getElementById('podium');
+  if (!podium) return;
+  const slots = podium.querySelectorAll('.podiumSlot');
+  const fill = (slotIdx, resIdx) => {
+    const slot = slots[slotIdx];
+    if (!slot) return;
+    const name = slot.querySelector('.podiumName');
+    const kills = slot.querySelector('.podiumKills');
+    const r = results[resIdx];
+    if (r) {
+      name.textContent = (r.id === me.id ? '★ ' : '') + (r.name || `Player${r.id}`);
+      kills.textContent = `${r.kills} kill${r.kills === 1 ? '' : 's'}`;
+    } else {
+      name.textContent = '—';
+      kills.textContent = '';
+    }
+  };
+  // slot order in DOM: second, first, third (visual layout)
+  fill(1, 0); // 1st place → center slot
+  fill(0, 1); // 2nd place → left slot
+  fill(2, 2); // 3rd place → right slot
+
+  const rest = document.getElementById('podiumRest');
+  if (rest) {
+    rest.innerHTML = '';
+    for (let i = 3; i < results.length; i++) {
+      const r = results[i];
+      const row = document.createElement('div');
+      row.className = 'restRow';
+      const you = r.id === me.id ? ' ★' : '';
+      row.innerHTML = `<span class="placeNum">#${r.placement || (i+1)}</span> ${r.name || 'Player'} — ${r.kills || 0} kills${you}`;
+      rest.appendChild(row);
+    }
+  }
+  podium.classList.add('show');
+}
+
+function hidePodium() {
+  const podium = document.getElementById('podium');
+  if (podium) podium.classList.remove('show');
 }
 
 function updateZoneMesh() {
@@ -2448,6 +2549,15 @@ document.querySelectorAll('.emoteOption').forEach((el) => {
     sendEmote(el.dataset.emote);
   });
 });
+
+// Podium close button
+const podiumCloseBtn = document.getElementById('podiumClose');
+if (podiumCloseBtn) {
+  podiumCloseBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hidePodium();
+  });
+}
 
 // Init coin UI + ammo UI on load
 updateCoinsUI();

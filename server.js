@@ -158,6 +158,7 @@ function startGame() {
     p.alive = true;
     p.rotY = 0;
     p.kills = 0;
+    p.placement = null;
     p.protectedUntil = now + SPAWN_PROTECTION_MS;
     // Tell THIS player their new position so client can teleport
     send(p.ws, { type: 'spawn', x: p.x, y: p.y, z: p.z });
@@ -221,9 +222,10 @@ function applyDamage(p, dmg) {
 function endGame(winnerId) {
   gameState = 'ended';
   const w = winnerId ? players.get(winnerId) : null;
+  if (w) w.placement = 1;
   winnerInfo = w ? { id: winnerId, name: w.name } : null;
   gameEndTime = Date.now();
-  broadcast({ type: 'gameover', winner: winnerInfo });
+  broadcast({ type: 'gameover', winner: winnerInfo, results: getMatchResults() });
 }
 
 function returnToLobby() {
@@ -332,6 +334,8 @@ setInterval(tick, 1000 / TICK_RATE);
 function killPlayer(id, killerId) {
   const p = players.get(id);
   if (!p || !p.alive) return;
+  // Placement = current alive count (including this player about to die)
+  p.placement = aliveCount();
   p.alive = false;
   p.hp = 0;
   const killer = killerId ? players.get(killerId) : null;
@@ -342,6 +346,21 @@ function killPlayer(id, killerId) {
     killerId: killerId,
     killerName: killer ? killer.name : null,
   });
+}
+
+function getMatchResults() {
+  const arr = [];
+  for (const [id, p] of players) {
+    arr.push({
+      id,
+      name: p.name,
+      kills: p.kills || 0,
+      placement: p.placement || 999,
+      skin: p.skin || 'default',
+    });
+  }
+  arr.sort((a, b) => a.placement - b.placement);
+  return arr;
 }
 
 function rayHitsObstacle(ox, oy, oz, dx, dy, dz, maxDist) {
