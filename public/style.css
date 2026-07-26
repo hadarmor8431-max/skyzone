@@ -680,6 +680,27 @@ body.touch { touch-action: none; -webkit-user-select: none; user-select: none; }
   border-radius: 10px;
 }
 
+#touchAim {
+  bottom: 265px;
+  right: 160px;
+  width: 80px;
+  height: 80px;
+  font-size: 15px;
+  border-color: rgba(255, 215, 100, 0.7);
+  background: rgba(60, 50, 20, 0.7);
+}
+#touchAim.active {
+  background: rgba(255, 215, 100, 0.85);
+  color: #221600;
+  border-color: #ffe08a;
+}
+
+/* Slight visual change on crosshair when aiming (small dot) */
+body.aiming:not(.scoped) #crosshair {
+  font-size: 12px;
+  color: rgba(255, 200, 100, 0.9);
+}
+
 /* On touch devices, beef up weapon buttons and reposition for thumb reach */
 body.touch #weaponBar {
   bottom: 18px;

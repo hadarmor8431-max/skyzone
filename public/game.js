@@ -731,22 +731,30 @@ document.addEventListener('pointerlockchange', () => {
 
 document.addEventListener('mousemove', (e) => {
   if (!pointerLocked) return;
-  const scopedMult = isScoped() ? 0.35 : 1;
-  const sens = 0.0025 * settings.sensitivity * scopedMult;
+  const w = WEAPONS[currentWeapon];
+  const aimMult = (isAiming() && w) ? w.aimSensMult : 1;
+  const sens = 0.0025 * settings.sensitivity * aimMult;
   me.rotY -= e.movementX * sens;
   me.pitch += e.movementY * sens * (settings.invertY ? 1 : -1);
   me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch));
 });
 
 document.addEventListener('mousedown', (e) => {
-  if (!pointerLocked || e.button !== 0 || menuOpen) return;
-  mouseHeld = true;
-  fireShot(); // immediate first shot (one click = one shot for pump/sniper)
+  if (menuOpen) return;
+  if (e.button === 0 && pointerLocked) {
+    mouseHeld = true;
+    fireShot(); // immediate first shot (one click = one shot for pump/sniper)
+  } else if (e.button === 2 && pointerLocked) {
+    aiming = true;
+    updateScope();
+  }
 });
 document.addEventListener('mouseup', (e) => {
   if (e.button === 0) mouseHeld = false;
+  else if (e.button === 2) { aiming = false; updateScope(); }
 });
-window.addEventListener('blur', () => { mouseHeld = false; });
+window.addEventListener('blur', () => { mouseHeld = false; aiming = false; updateScope(); });
+document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---------- TOUCH HANDLERS ----------
 if (isTouchDevice) {
@@ -802,8 +810,9 @@ if (isTouchDevice) {
         const moveY = t.clientY - look.lastY;
         look.lastX = t.clientX;
         look.lastY = t.clientY;
-        const scopedMult = isScoped() ? 0.35 : 1;
-        const sens = 0.005 * settings.sensitivity * scopedMult;
+        const w = WEAPONS[currentWeapon];
+        const aimMult = (isAiming() && w) ? w.aimSensMult : 1;
+        const sens = 0.005 * settings.sensitivity * aimMult;
         me.rotY -= moveX * sens;
         me.pitch += moveY * sens * (settings.invertY ? 1 : -1);
         me.pitch = Math.max(-1.2, Math.min(1.2, me.pitch));
@@ -850,6 +859,27 @@ if (isTouchDevice) {
     else openPauseMenu();
   });
 
+  const aimBtn = document.getElementById('touchAim');
+  if (aimBtn) {
+    aimBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      aiming = true;
+      aimBtn.classList.add('active');
+      updateScope();
+    });
+    aimBtn.addEventListener('touchend', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      aiming = false;
+      aimBtn.classList.remove('active');
+      updateScope();
+    });
+    aimBtn.addEventListener('touchcancel', () => {
+      aiming = false;
+      aimBtn.classList.remove('active');
+      updateScope();
+    });
+  }
+
   // Weapon buttons via touchstart (faster than click on mobile)
   document.querySelectorAll('.weapon').forEach((el) => {
     el.addEventListener('touchstart', (e) => {
@@ -867,11 +897,12 @@ window.addEventListener('resize', () => {
 
 // ---------- WEAPONS ----------
 const WEAPONS = {
-  ar:     { dmg: 25,  cooldown: 110,  color: 0xfff0a8, radius: 0.04, length: 0.9,  speed: 220, flashSize: 0.35, flashColor: 0xffdd66, pitch: 1.0,  magSize: 30, reloadMs: 1800 },
-  smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15, magSize: 35, reloadMs: 1600 },
-  pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65, magSize: 6,  reloadMs: 2500 },
-  sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35, magSize: 5,  reloadMs: 2800 },
+  ar:     { dmg: 25,  cooldown: 110,  color: 0xfff0a8, radius: 0.04, length: 0.9,  speed: 220, flashSize: 0.35, flashColor: 0xffdd66, pitch: 1.0,  magSize: 30, reloadMs: 1800, aimFov: 50, aimHasScope: false, aimSensMult: 0.60 },
+  smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15, magSize: 35, reloadMs: 1600, aimFov: 55, aimHasScope: false, aimSensMult: 0.65 },
+  pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65, magSize: 6,  reloadMs: 2500, aimFov: 60, aimHasScope: false, aimSensMult: 0.70 },
+  sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35, magSize: 5,  reloadMs: 2800, aimFov: 22, aimHasScope: true,  aimSensMult: 0.35 },
 };
+let aiming = false;
 
 // Per-weapon current ammo (starts full)
 const ammo = {};
@@ -885,6 +916,7 @@ let lastShotTime = 0;
 function selectWeapon(name) {
   if (!WEAPONS[name] || currentWeapon === name) return;
   cancelReload();
+  aiming = false; // Release aim when swapping weapons
   currentWeapon = name;
   document.querySelectorAll('.weapon').forEach((el) => {
     el.classList.toggle('active', el.dataset.weapon === name);
@@ -2069,13 +2101,24 @@ function applySettings() {
 }
 
 function isScoped() {
-  return currentWeapon === 'sniper' && me.alive;
+  // Only sniper shows the scope overlay, and only while ADS
+  return aiming && WEAPONS[currentWeapon] && WEAPONS[currentWeapon].aimHasScope && me.alive;
+}
+
+function isAiming() {
+  return aiming && me.alive;
 }
 
 function updateScope() {
-  const scoped = isScoped();
-  document.body.classList.toggle('scoped', scoped);
-  camera.fov = scoped ? 25 : settings.fov;
+  const w = WEAPONS[currentWeapon];
+  const scopeOn = isScoped();
+  document.body.classList.toggle('scoped', scopeOn);
+  document.body.classList.toggle('aiming', isAiming());
+  if (isAiming() && w) {
+    camera.fov = w.aimFov;
+  } else {
+    camera.fov = settings.fov;
+  }
   camera.updateProjectionMatrix();
 }
 
