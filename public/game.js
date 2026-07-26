@@ -445,6 +445,10 @@ function closeEmoteMenu() {
   const m = document.getElementById('emoteMenu');
   if (!m) return;
   m.classList.add('hidden');
+  // Re-acquire pointer lock so player can keep playing seamlessly
+  if (!isTouchDevice && me.alive && gameState === 'playing' && !menuOpen) {
+    canvas.requestPointerLock();
+  }
 }
 
 function renderLockerUI() {
@@ -783,8 +787,15 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === kb.weaponPump) selectWeapon('pump');
   else if (e.code === kb.weaponSniper) selectWeapon('sniper');
   else if (e.code === kb.weaponKnife) selectWeapon('knife');
-  else if (e.code === 'KeyB') toggleEmoteMenu();
+  else if (e.code === 'KeyB') {
+    // Only allow if not in another menu
+    if (!menuOpen) toggleEmoteMenu();
+  }
   else if (e.code === 'KeyR') startReload();
+  else if (e.code === 'Escape') {
+    const em = document.getElementById('emoteMenu');
+    if (em && !em.classList.contains('hidden')) closeEmoteMenu();
+  }
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -805,6 +816,9 @@ document.addEventListener('pointerlockchange', () => {
   if (isTouchDevice) return;
   pointerLocked = document.pointerLockElement === canvas;
   if (!pointerLocked && me.alive && gameState === 'playing' && lobby.classList.contains('hidden')) {
+    // If the emote menu is open, don't stack the pause menu on top of it
+    const em = document.getElementById('emoteMenu');
+    if (em && !em.classList.contains('hidden')) return;
     openPauseMenu();
   } else if (pointerLocked) {
     closeMenus();
