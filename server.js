@@ -423,17 +423,26 @@ function handleShoot(shooterId, msg) {
     let hitWasHeadshot = false;
     for (const [id, p] of players) {
       if (id === shooterId || !p.alive) continue;
-      // Crouching lowers the hit sphere and shrinks its center
-      const centerY = p.y + (p.crouching ? 0.7 : 1);
-      const radius = p.crouching ? 0.75 : 0.9;
-      const t = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, centerY, p.z, radius);
-      if (t !== null && t > 0 && t < bestT) {
-        bestT = t;
+      const crouch = !!p.crouching;
+      // Body sphere: covers torso + legs (bigger, easier target)
+      const bodyY = p.y + (crouch ? 0.65 : 0.95);
+      const bodyR = crouch ? 0.55 : 0.75;
+      // Head sphere: separate, smaller hitbox for headshot bonus damage
+      const headY = p.y + (crouch ? 1.35 : 2.1);
+      const headR = crouch ? 0.32 : 0.38;
+
+      const tBody = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, bodyY, p.z, bodyR);
+      const tHead = raySphere(ox, oy, oz, pdx, pdy, pdz, p.x, headY, p.z, headR);
+
+      // Take the closer of the two hits
+      let hitT = null, isHead = false;
+      if (tHead !== null && tHead > 0) { hitT = tHead; isHead = true; }
+      if (tBody !== null && tBody > 0 && (hitT === null || tBody < hitT)) { hitT = tBody; isHead = false; }
+
+      if (hitT !== null && hitT < bestT) {
+        bestT = hitT;
         hitId = id;
-        // Head zone threshold changes when crouching
-        const headThreshold = p.crouching ? 1.05 : 1.55;
-        const hitY = oy + pdy * t;
-        hitWasHeadshot = hitY > (p.y + headThreshold);
+        hitWasHeadshot = isHead;
       }
     }
     pelletResults.push({
