@@ -35,6 +35,7 @@ const DEFAULT_KEYBINDS = {
   weaponSMG: 'Digit2',
   weaponPump: 'Digit3',
   weaponSniper: 'Digit4',
+  weaponKnife: 'Digit5',
 };
 const DEFAULT_SETTINGS = {
   sensitivity: 1.0,    // multiplier on base 0.0025
@@ -585,6 +586,26 @@ function buildWeaponMesh(name) {
     add(new THREE.BoxGeometry(0.06, 0.10, 0.26), black, 0,     0.13,-0.05);  // scope body
     add(new THREE.BoxGeometry(0.04, 0.04, 0.02), new THREE.MeshBasicMaterial({ color: 0x000000 }), 0, 0.13, -0.19); // scope lens
     add(new THREE.BoxGeometry(0.03, 0.06, 0.04), black, 0,     0.07,-0.05);  // scope mount
+  } else if (name === 'knife') {
+    const bladeSteel = new THREE.MeshLambertMaterial({ color: 0xe0e0e0, emissive: 0x333333, emissiveIntensity: 0.2 });
+    const wood       = new THREE.MeshLambertMaterial({ color: 0x5a2f18 });
+    // Handle (brown grip)
+    add(new THREE.BoxGeometry(0.05, 0.08, 0.14), wood,   0, 0, 0.10);
+    // Cross-guard (thin dark bar)
+    add(new THREE.BoxGeometry(0.10, 0.04, 0.03), black,  0, 0, 0.02);
+    // Blade (long tapered rectangle) - shift geometry so pivot is at guard
+    {
+      const bg = new THREE.BoxGeometry(0.05, 0.02, 0.32);
+      const bl = new THREE.Mesh(bg, bladeSteel);
+      bl.position.set(0, 0, -0.16);
+      g.add(bl);
+    }
+    // Blade tip (small pointed cone)
+    const tipGeom = new THREE.ConeGeometry(0.025, 0.10, 4);
+    tipGeom.rotateX(Math.PI / 2);
+    const tip = new THREE.Mesh(tipGeom, bladeSteel);
+    tip.position.set(0, 0, -0.37);
+    g.add(tip);
   }
   return g;
 }
@@ -702,6 +723,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === kb.weaponSMG) selectWeapon('smg');
   else if (e.code === kb.weaponPump) selectWeapon('pump');
   else if (e.code === kb.weaponSniper) selectWeapon('sniper');
+  else if (e.code === kb.weaponKnife) selectWeapon('knife');
   else if (e.code === 'KeyB') toggleEmoteMenu();
   else if (e.code === 'KeyR') startReload();
 });
@@ -912,6 +934,7 @@ const WEAPONS = {
   smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15, magSize: 35, reloadMs: 1600, aimFov: 55, aimHasScope: false, aimSensMult: 0.65 },
   pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65, magSize: 6,  reloadMs: 2500, aimFov: 60, aimHasScope: false, aimSensMult: 0.70 },
   sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35, magSize: 5,  reloadMs: 2800, aimFov: 22, aimHasScope: true,  aimSensMult: 0.35 },
+  knife:  { dmg: 60,  cooldown: 500,  color: 0xd0d0d0, radius: 0.02, length: 0.5,  speed: 400, flashSize: 0.0,  flashColor: 0xffffff, pitch: 1.5,  magSize: 999, reloadMs: 0, aimFov: 65, aimHasScope: false, aimSensMult: 0.85, melee: true },
 };
 let aiming = false;
 
@@ -923,12 +946,16 @@ let reloadEndTime = 0;
 let reloadingWeapon = null;
 let currentWeapon = 'ar';
 let lastShotTime = 0;
+let switchStart = -1000; // Long ago = no active switch
+const SWITCH_MS = 300;
 
 function selectWeapon(name) {
   if (!WEAPONS[name] || currentWeapon === name) return;
   cancelReload();
   aiming = false; // Release aim when swapping weapons
   currentWeapon = name;
+  switchStart = performance.now();
+  playSwitchSound();
   document.querySelectorAll('.weapon').forEach((el) => {
     el.classList.toggle('active', el.dataset.weapon === name);
   });
@@ -940,6 +967,22 @@ function selectWeapon(name) {
   updateAmmoUI();
 }
 
+function updateWeaponSwitchAnim() {
+  if (!myMesh || !myMesh.userData.weaponHolder) return;
+  const holder = myMesh.userData.weaponHolder;
+  const elapsed = performance.now() - switchStart;
+  if (elapsed < SWITCH_MS) {
+    const t = elapsed / SWITCH_MS;
+    // Ease-out: weapon swings up from a lowered position
+    const e = 1 - Math.pow(1 - t, 2);
+    holder.rotation.x = (1 - e) * 0.9;
+    holder.position.y = 1.45 - (1 - e) * 0.3;
+  } else if (holder.rotation.x !== 0 || holder.position.y !== 1.45) {
+    holder.rotation.x = 0;
+    holder.position.y = 1.45;
+  }
+}
+
 // ---------- SHOOTING ----------
 const bullets = [];  // {mesh, sx,sy,sz, ex,ey,ez, elapsed, duration}
 const flashes = [];  // {mesh, light, life, max}
@@ -949,16 +992,23 @@ function fireShot() {
   ensureAudio();
   const w = WEAPONS[currentWeapon];
   const now = performance.now();
+  // Weapon still switching - block fire
+  if (now - switchStart < SWITCH_MS) return;
   if (reloading) return;
-  if (ammo[currentWeapon] <= 0) {
-    startReload();
-    return;
+  // Melee weapons don't use ammo
+  if (!w.melee) {
+    if (ammo[currentWeapon] <= 0) {
+      startReload();
+      return;
+    }
   }
   if (now - lastShotTime < w.cooldown) return;
   lastShotTime = now;
-  ammo[currentWeapon]--;
-  updateAmmoUI();
-  if (ammo[currentWeapon] === 0) startReload();
+  if (!w.melee) {
+    ammo[currentWeapon]--;
+    updateAmmoUI();
+    if (ammo[currentWeapon] === 0) startReload();
+  }
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   const dir = new THREE.Vector3();
@@ -974,6 +1024,7 @@ function fireShot() {
 function startReload() {
   const w = WEAPONS[currentWeapon];
   if (reloading) return;
+  if (w.melee) return; // melee has no reload
   if (ammo[currentWeapon] >= w.magSize) return;
   reloading = true;
   reloadingWeapon = currentWeapon;
@@ -1028,12 +1079,21 @@ function hideReloadUI() {
 function updateAmmoUI() {
   const cur = document.getElementById('ammoCurrent');
   const max = document.getElementById('ammoMax');
-  if (cur) cur.textContent = ammo[currentWeapon];
-  if (max) max.textContent = WEAPONS[currentWeapon].magSize;
-  // Tint red when low
   const wrap = document.getElementById('ammoDisplay');
+  const sep = document.querySelector('#ammoDisplay .ammoSep');
+  const w = WEAPONS[currentWeapon];
+  if (w.melee) {
+    if (cur) cur.textContent = '∞';
+    if (max) max.textContent = '';
+    if (sep) sep.style.display = 'none';
+    if (wrap) { wrap.classList.remove('lowAmmo', 'emptyAmmo'); }
+    return;
+  }
+  if (sep) sep.style.display = '';
+  if (cur) cur.textContent = ammo[currentWeapon];
+  if (max) max.textContent = w.magSize;
   if (wrap) {
-    const ratio = ammo[currentWeapon] / WEAPONS[currentWeapon].magSize;
+    const ratio = ammo[currentWeapon] / w.magSize;
     wrap.classList.toggle('lowAmmo', ratio < 0.25);
     wrap.classList.toggle('emptyAmmo', ammo[currentWeapon] === 0);
   }
@@ -1372,11 +1432,45 @@ function playSMGShot(volume = 1.0) {
   osc.start(now); osc.stop(now + 0.09);
 }
 
+function playKnifeSwing(volume = 1.0) {
+  volume *= settings.volume;
+  if (!audioCtx || volume <= 0.005) return;
+  const now = audioCtx.currentTime;
+  // Whoosh — filtered noise, quick decay
+  const src = audioCtx.createBufferSource();
+  src.buffer = _noiseBuffer(0.14, 0.04);
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 2800; bp.Q.value = 1.2;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.4 * volume, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+  src.connect(bp).connect(g).connect(audioCtx.destination);
+  src.start(now);
+}
+
+function playSwitchSound() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const vol = settings.volume;
+  if (vol <= 0.01) return;
+  // Metallic click - short square wave
+  const osc = audioCtx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(720, now);
+  osc.frequency.exponentialRampToValueAtTime(280, now + 0.05);
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.14 * vol, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  osc.connect(g).connect(audioCtx.destination);
+  osc.start(now); osc.stop(now + 0.08);
+}
+
 // Dispatcher used by spawnShotEffect
 function playWeaponSound(weapon, volume = 1.0) {
   if (weapon === 'sniper') return playSniperShot(volume);
   if (weapon === 'pump')   return playPumpShot(volume);
   if (weapon === 'smg')    return playSMGShot(volume);
+  if (weapon === 'knife')  return playKnifeSwing(volume);
   return playARShot(volume);
 }
 
@@ -2106,6 +2200,7 @@ function loop() {
   updateZoneTimer();
   updateSpawnProtectUI();
   tickReload();
+  updateWeaponSwitchAnim();
   drawMinimap();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -2163,6 +2258,7 @@ function syncHotkeyChips() {
   setChip('.weapon[data-weapon="smg"] .wKey', kb.weaponSMG);
   setChip('.weapon[data-weapon="pump"] .wKey', kb.weaponPump);
   setChip('.weapon[data-weapon="sniper"] .wKey', kb.weaponSniper);
+  setChip('.weapon[data-weapon="knife"] .wKey', kb.weaponKnife);
 }
 
 let rebindingHandler = null;

@@ -12,6 +12,7 @@ const WEAPONS = {
   smg:    { dmg: 12,  cooldown: 65,   range: 45                              },
   pump:   { dmg: 15,  cooldown: 800,  range: 22,  pellets: 10, spread: 0.09  },
   sniper: { dmg: 100, cooldown: 1400, range: 250                             },
+  knife:  { dmg: 60,  cooldown: 500,  range: 2.5, melee: true                },
 };
 const MAP_SIZE = 500;
 const ZONE_DAMAGE_PER_SEC = 5;

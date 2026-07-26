@@ -22,7 +22,7 @@
       <button id="playBtn">PLAY</button>
       <div class="howto desktopOnly">
         <div><b>WASD</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Left click</b> shoot</div>
-        <div><b>1/2/3/4</b> AR/SMG/Pump/Sniper &nbsp; <b>R</b> reload &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint</div>
+        <div><b>1-5</b> AR/SMG/Pump/Sniper/Knife &nbsp; <b>R</b> reload &nbsp; <b>Ctrl</b> crouch &nbsp; <b>Right-click</b> aim</div>
         <div><b>Esc</b> menu &nbsp; Walk over blue potions for shield. Stay in the blue zone!</div>
       </div>
       <div class="howto touchOnly">
@@ -120,6 +120,12 @@
         <div class="wName">SNIPER</div>
         <div class="wDmg">100</div>
       </div>
+      <div class="weapon" data-weapon="knife">
+        <div class="wKey">5</div>
+        <svg class="wIcon" viewBox="0 0 60 22" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><rect x="4" y="9" width="10" height="7" rx="1"/><rect x="14" y="8" width="3" height="9"/><polygon points="17,10 17,14 55,12"/></g></svg>
+        <div class="wName">KNIFE</div>
+        <div class="wDmg">60</div>
+      </div>
     </div>
 
     <div id="touchControls">
@@ -191,6 +197,7 @@
           <div class="kbRow"><span>Weapon SMG</span><button class="keybind" data-bind="weaponSMG">2</button></div>
           <div class="kbRow"><span>Weapon Pump</span><button class="keybind" data-bind="weaponPump">3</button></div>
           <div class="kbRow"><span>Weapon Sniper</span><button class="keybind" data-bind="weaponSniper">4</button></div>
+          <div class="kbRow"><span>Weapon Knife</span><button class="keybind" data-bind="weaponKnife">5</button></div>
         </div>
 
         <div class="settingsActions">
