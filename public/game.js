@@ -445,8 +445,8 @@ function closeEmoteMenu() {
   const m = document.getElementById('emoteMenu');
   if (!m) return;
   m.classList.add('hidden');
-  // Re-acquire pointer lock so player can keep playing seamlessly
-  if (!isTouchDevice && me.alive && gameState === 'playing' && !menuOpen) {
+  // Re-acquire pointer lock in BOTH lobby and playing states, so the camera doesn't feel stuck
+  if (!isTouchDevice && me.alive && !menuOpen && lobby.classList.contains('hidden')) {
     canvas.requestPointerLock();
   }
 }
@@ -686,7 +686,8 @@ function animatePlayerMesh(mesh, walkingIntensity, t, playerId) {
   if (!mesh || !mesh.userData) return;
   const { armL, armR, legL, legR, phase } = mesh.userData;
   if (!armL) return;
-  if (mesh.userData._baseY === undefined) mesh.userData._baseY = mesh.position.y;
+  // Refresh baseY each frame — position gets reset from me.y before this call
+  mesh.userData._baseY = mesh.position.y;
 
   // Check if this player is emoting
   const emote = activeEmotes.get(playerId);
