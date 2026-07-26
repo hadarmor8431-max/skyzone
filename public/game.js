@@ -947,7 +947,9 @@ let reloadingWeapon = null;
 let currentWeapon = 'ar';
 let lastShotTime = 0;
 let switchStart = -1000; // Long ago = no active switch
-const SWITCH_MS = 300;
+const SWITCH_MS = 500;
+// Rest pose for weapon holder (world coord within mesh)
+const HOLDER_REST_POS = { x: 0.55, y: 1.45, z: -0.4 };
 
 function selectWeapon(name) {
   if (!WEAPONS[name] || currentWeapon === name) return;
@@ -973,13 +975,18 @@ function updateWeaponSwitchAnim() {
   const elapsed = performance.now() - switchStart;
   if (elapsed < SWITCH_MS) {
     const t = elapsed / SWITCH_MS;
-    // Ease-out: weapon swings up from a lowered position
-    const e = 1 - Math.pow(1 - t, 2);
-    holder.rotation.x = (1 - e) * 0.9;
-    holder.position.y = 1.45 - (1 - e) * 0.3;
-  } else if (holder.rotation.x !== 0 || holder.position.y !== 1.45) {
+    // Ease-out cubic: weapon dramatically swings up from lowered/rotated pose
+    const e = 1 - Math.pow(1 - t, 3);
+    // Starts pointing DOWN and 1.1m below rest, rises + rotates back to normal
+    holder.rotation.x = (1 - e) * -1.4;      // 80° tilted down at start
+    holder.rotation.z = (1 - e) * 0.4;       // slight tilt inward
+    holder.position.y = HOLDER_REST_POS.y - (1 - e) * 1.1;  // 1.1m below rest at start
+    holder.position.x = HOLDER_REST_POS.x - (1 - e) * 0.25; // slightly toward center at start
+  } else if (holder.rotation.x !== 0 || holder.position.y !== HOLDER_REST_POS.y) {
     holder.rotation.x = 0;
-    holder.position.y = 1.45;
+    holder.rotation.z = 0;
+    holder.position.x = HOLDER_REST_POS.x;
+    holder.position.y = HOLDER_REST_POS.y;
   }
 }
 
@@ -1436,16 +1443,40 @@ function playKnifeSwing(volume = 1.0) {
   volume *= settings.volume;
   if (!audioCtx || volume <= 0.005) return;
   const now = audioCtx.currentTime;
-  // Whoosh — filtered noise, quick decay
-  const src = audioCtx.createBufferSource();
-  src.buffer = _noiseBuffer(0.14, 0.04);
-  const bp = audioCtx.createBiquadFilter();
-  bp.type = 'bandpass'; bp.frequency.value = 2800; bp.Q.value = 1.2;
-  const g = audioCtx.createGain();
-  g.gain.setValueAtTime(0.4 * volume, now);
-  g.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-  src.connect(bp).connect(g).connect(audioCtx.destination);
-  src.start(now);
+
+  // 1. Whoosh — filtered noise, quick decay (air swipe)
+  const swoosh = audioCtx.createBufferSource();
+  swoosh.buffer = _noiseBuffer(0.18, 0.05);
+  const swooshBP = audioCtx.createBiquadFilter();
+  swooshBP.type = 'bandpass'; swooshBP.frequency.value = 2400; swooshBP.Q.value = 0.9;
+  const swooshGain = audioCtx.createGain();
+  swooshGain.gain.setValueAtTime(0.001, now);
+  swooshGain.gain.exponentialRampToValueAtTime(0.5 * volume, now + 0.03);
+  swooshGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  swoosh.connect(swooshBP).connect(swooshGain).connect(audioCtx.destination);
+  swoosh.start(now);
+
+  // 2. Metallic "shwing" — descending triangle pitch
+  const shwing = audioCtx.createOscillator();
+  shwing.type = 'triangle';
+  shwing.frequency.setValueAtTime(1600, now);
+  shwing.frequency.exponentialRampToValueAtTime(500, now + 0.15);
+  const shwingGain = audioCtx.createGain();
+  shwingGain.gain.setValueAtTime(0.18 * volume, now);
+  shwingGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  shwing.connect(shwingGain).connect(audioCtx.destination);
+  shwing.start(now); shwing.stop(now + 0.19);
+
+  // 3. Bright top "cut" — short high sine
+  const cut = audioCtx.createOscillator();
+  cut.type = 'sine';
+  cut.frequency.setValueAtTime(3200, now);
+  cut.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+  const cutGain = audioCtx.createGain();
+  cutGain.gain.setValueAtTime(0.10 * volume, now);
+  cutGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+  cut.connect(cutGain).connect(audioCtx.destination);
+  cut.start(now); cut.stop(now + 0.07);
 }
 
 function playSwitchSound() {
