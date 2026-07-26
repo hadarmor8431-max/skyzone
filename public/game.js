@@ -702,6 +702,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === kb.weaponPump) selectWeapon('pump');
   else if (e.code === kb.weaponSniper) selectWeapon('sniper');
   else if (e.code === 'KeyB') toggleEmoteMenu();
+  else if (e.code === 'KeyR') startReload();
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
@@ -866,16 +867,24 @@ window.addEventListener('resize', () => {
 
 // ---------- WEAPONS ----------
 const WEAPONS = {
-  ar:     { dmg: 25,  cooldown: 110,  color: 0xfff0a8, radius: 0.04, length: 0.9,  speed: 220, flashSize: 0.35, flashColor: 0xffdd66, pitch: 1.0  },
-  smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15 },
-  pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65 },
-  sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35 },
+  ar:     { dmg: 25,  cooldown: 110,  color: 0xfff0a8, radius: 0.04, length: 0.9,  speed: 220, flashSize: 0.35, flashColor: 0xffdd66, pitch: 1.0,  magSize: 30, reloadMs: 1800 },
+  smg:    { dmg: 12,  cooldown: 65,   color: 0xffaa55, radius: 0.035, length: 0.7, speed: 240, flashSize: 0.30, flashColor: 0xffaa55, pitch: 1.15, magSize: 35, reloadMs: 1600 },
+  pump:   { dmg: 150, cooldown: 800,  color: 0xff9955, radius: 0.03, length: 0.35, speed: 150, flashSize: 0.6,  flashColor: 0xff7733, pitch: 0.65, magSize: 6,  reloadMs: 2500 },
+  sniper: { dmg: 100, cooldown: 1400, color: 0xc0eaff, radius: 0.03, length: 2.0,  speed: 600, flashSize: 0.28, flashColor: 0xddffff, pitch: 1.35, magSize: 5,  reloadMs: 2800 },
 };
+
+// Per-weapon current ammo (starts full)
+const ammo = {};
+for (const [name, w] of Object.entries(WEAPONS)) ammo[name] = w.magSize;
+let reloading = false;
+let reloadEndTime = 0;
+let reloadingWeapon = null;
 let currentWeapon = 'ar';
 let lastShotTime = 0;
 
 function selectWeapon(name) {
   if (!WEAPONS[name] || currentWeapon === name) return;
+  cancelReload();
   currentWeapon = name;
   document.querySelectorAll('.weapon').forEach((el) => {
     el.classList.toggle('active', el.dataset.weapon === name);
@@ -885,6 +894,7 @@ function selectWeapon(name) {
     ws.send(JSON.stringify({ type: 'weapon', weapon: name }));
   }
   updateScope();
+  updateAmmoUI();
 }
 
 // ---------- SHOOTING ----------
@@ -896,8 +906,16 @@ function fireShot() {
   ensureAudio();
   const w = WEAPONS[currentWeapon];
   const now = performance.now();
+  if (reloading) return;
+  if (ammo[currentWeapon] <= 0) {
+    startReload();
+    return;
+  }
   if (now - lastShotTime < w.cooldown) return;
   lastShotTime = now;
+  ammo[currentWeapon]--;
+  updateAmmoUI();
+  if (ammo[currentWeapon] === 0) startReload();
   const origin = new THREE.Vector3();
   camera.getWorldPosition(origin);
   const dir = new THREE.Vector3();
@@ -908,6 +926,74 @@ function fireShot() {
     ox: origin.x, oy: origin.y, oz: origin.z,
     dx: dir.x, dy: dir.y, dz: dir.z,
   }));
+}
+
+function startReload() {
+  const w = WEAPONS[currentWeapon];
+  if (reloading) return;
+  if (ammo[currentWeapon] >= w.magSize) return;
+  reloading = true;
+  reloadingWeapon = currentWeapon;
+  reloadEndTime = performance.now() + w.reloadMs;
+  showReloadUI(w.reloadMs);
+}
+
+function cancelReload() {
+  reloading = false;
+  reloadingWeapon = null;
+  hideReloadUI();
+}
+
+function tickReload() {
+  if (!reloading) return;
+  const now = performance.now();
+  if (now >= reloadEndTime) {
+    if (reloadingWeapon && WEAPONS[reloadingWeapon]) {
+      ammo[reloadingWeapon] = WEAPONS[reloadingWeapon].magSize;
+    }
+    reloading = false;
+    reloadingWeapon = null;
+    hideReloadUI();
+    updateAmmoUI();
+  } else {
+    // Update progress bar
+    const w = WEAPONS[reloadingWeapon];
+    if (!w) return;
+    const elapsed = w.reloadMs - (reloadEndTime - now);
+    const pct = (elapsed / w.reloadMs) * 100;
+    const fill = document.getElementById('reloadFill');
+    if (fill) fill.style.width = pct + '%';
+  }
+}
+
+function showReloadUI(durMs) {
+  const bar = document.getElementById('reloadBar');
+  const text = document.getElementById('reloadText');
+  if (bar) { bar.style.display = 'block'; }
+  if (text) { text.style.display = 'block'; text.textContent = 'RELOADING'; }
+  const fill = document.getElementById('reloadFill');
+  if (fill) fill.style.width = '0%';
+}
+
+function hideReloadUI() {
+  const bar = document.getElementById('reloadBar');
+  const text = document.getElementById('reloadText');
+  if (bar) bar.style.display = 'none';
+  if (text) text.style.display = 'none';
+}
+
+function updateAmmoUI() {
+  const cur = document.getElementById('ammoCurrent');
+  const max = document.getElementById('ammoMax');
+  if (cur) cur.textContent = ammo[currentWeapon];
+  if (max) max.textContent = WEAPONS[currentWeapon].magSize;
+  // Tint red when low
+  const wrap = document.getElementById('ammoDisplay');
+  if (wrap) {
+    const ratio = ammo[currentWeapon] / WEAPONS[currentWeapon].magSize;
+    wrap.classList.toggle('lowAmmo', ratio < 0.25);
+    wrap.classList.toggle('emptyAmmo', ammo[currentWeapon] === 0);
+  }
 }
 
 function spawnShotEffect(msg, isMine) {
@@ -1970,6 +2056,7 @@ function loop() {
   updateWeaponCooldownUI();
   updateZoneTimer();
   updateSpawnProtectUI();
+  tickReload();
   drawMinimap();
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
@@ -2175,8 +2262,9 @@ document.querySelectorAll('.emoteOption').forEach((el) => {
   });
 });
 
-// Init coin UI on load
+// Init coin UI + ammo UI on load
 updateCoinsUI();
+updateAmmoUI();
 
 playBtn.addEventListener('click', () => {
   const n = (nameInput.value || '').trim().slice(0, 16) || 'Player';

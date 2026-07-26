@@ -251,6 +251,66 @@ canvas#game {
   text-shadow: 0 0 6px rgba(85, 220, 255, 0.8);
 }
 
+/* ---------- AMMO + RELOAD ---------- */
+#ammoDisplay {
+  position: absolute;
+  bottom: 120px;
+  right: 32px;
+  font-size: 34px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 3px;
+  text-shadow: 0 0 8px rgba(0,0,0,0.9);
+  z-index: 6;
+  pointer-events: none;
+  transition: color 0.2s;
+}
+#ammoDisplay .ammoSep {
+  color: #6a7a96;
+  margin: 0 4px;
+  font-size: 26px;
+  font-weight: 700;
+}
+#ammoDisplay #ammoMax { color: #b8c5d8; font-size: 22px; font-weight: 700; }
+#ammoDisplay.lowAmmo #ammoCurrent { color: #ffb547; }
+#ammoDisplay.emptyAmmo #ammoCurrent { color: #ff4444; }
+
+#reloadText {
+  position: absolute;
+  bottom: 33%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ffd700;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  display: none;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9);
+  z-index: 7;
+  pointer-events: none;
+}
+#reloadBar {
+  position: absolute;
+  bottom: 31%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  height: 6px;
+  background: rgba(10, 14, 26, 0.85);
+  border: 1px solid #6bb7ff;
+  border-radius: 3px;
+  overflow: hidden;
+  display: none;
+  z-index: 7;
+  pointer-events: none;
+}
+#reloadFill {
+  height: 100%;
+  background: linear-gradient(90deg, #6bb7ff, #ffd700);
+  width: 0%;
+  transition: width 50ms linear;
+}
+
 /* ---------- LOBBY PANEL ---------- */
 #lobbyPanel {
   position: absolute;

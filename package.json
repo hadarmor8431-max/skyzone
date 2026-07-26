@@ -1,7 +1,7 @@
 {
-  "name": "skyzone",
+  "name": "elite-place-game",
   "version": "2.0.0",
-  "description": "Skyzone — 3D multiplayer battle royale with Fortnite-style lobby",
+  "description": "Elite Place game — 3D multiplayer battle royale with Fortnite-style lobby, cosmetics, and ammo",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

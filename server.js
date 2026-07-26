@@ -586,5 +586,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Skyzone listening on port ${PORT}`);
+  console.log(`Elite Place game listening on port ${PORT}`);
 });

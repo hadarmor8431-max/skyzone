@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Skyzone</title>
+  <title>Elite Place game</title>
   <link rel="stylesheet" href="style.css" />
   <script type="importmap">
     {
@@ -16,13 +16,13 @@
 <body>
   <div id="lobby">
     <div class="panel">
-      <h1>SKYZONE</h1>
+      <h1>ELITE PLACE GAME</h1>
       <p class="subtitle">Last one standing wins.</p>
       <input id="nameInput" maxlength="16" placeholder="Your name" />
       <button id="playBtn">PLAY</button>
       <div class="howto desktopOnly">
         <div><b>WASD</b> move &nbsp; <b>Mouse</b> look &nbsp; <b>Left click</b> shoot</div>
-        <div><b>1/2/3/4</b> AR/SMG/Pump/Sniper &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint</div>
+        <div><b>1/2/3/4</b> AR/SMG/Pump/Sniper &nbsp; <b>R</b> reload &nbsp; <b>Space</b> jump &nbsp; <b>Shift</b> sprint</div>
         <div><b>Esc</b> menu &nbsp; Walk over blue potions for shield. Stay in the blue zone!</div>
       </div>
       <div class="howto touchOnly">
@@ -55,6 +55,11 @@
     <div id="hitMarker"></div>
     <div id="damageIndicators"></div>
     <div id="spawnProtect" class="hidden">SPAWN PROTECTED</div>
+    <div id="reloadText">RELOADING</div>
+    <div id="reloadBar"><div id="reloadFill"></div></div>
+    <div id="ammoDisplay">
+      <span id="ammoCurrent">30</span><span class="ammoSep">/</span><span id="ammoMax">30</span>
+    </div>
     <div id="lobbyPanel">
       <div class="lobbyTitle">LOBBY &mdash; waiting for match to start</div>
       <button id="startMatchBtn">START MATCH</button>
